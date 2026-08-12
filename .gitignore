@@ -28,6 +28,7 @@ database/*.db-shm
 # Component gallery for style.css. Not committed: express.static
 # would serve it as a public route.
 public/qa.html
+public/render-*.html
 
 # ── Logs & OS cruft ────────────────────────────────────────
 *.log

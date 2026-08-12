@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title><%= typeof title !== 'undefined' ? title : 'ATI ZMATF Assessment' %></title>
+
+  <%#
+    CSRF token for AJAX. public/js/assessment.js reads this and sends it as
+    the X-CSRF-Token header on POST /assessment/save-answer.
+    Forms use the hidden _csrf input instead.
+  %>
+  <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+  <meta name="csrf-token" content="<%= csrfToken %>">
+  <% } %>
+
+  <%#
+    TYPEFACES — self-hosted.
+
+    Drop these subsetted woff2 files into public/fonts/:
+      source-serif-4-600.woff2
+      fira-sans-400.woff2   fira-sans-650.woff2
+      ibm-plex-mono-400.woff2   ibm-plex-mono-600.woff2
+
+    All three families are OFL-licensed and free to self-host. Until the files
+    are present the @font-face rules in style.css fail silently and the humanist
+    system fallbacks take over, so the app renders correctly either way.
+
+    Self-hosting removes a render-blocking third-party round trip on the
+    variable connectivity this cohort works over, and lets the CSP in server.js
+    drop fonts.googleapis.com and fonts.gstatic.com entirely.
+
+    To use Google Fonts as an interim bridge instead, uncomment the two links
+    below. The CSP in server.js already permits both origins.
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600&family=Fira+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+  %>
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/fira-sans-400.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/source-serif-4-600.woff2" crossorigin>
+
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <%#
+    NAVIGATION
+    Variants are driven by an optional `nav` local so a single layout serves
+    every screen. Routes may pass:
+
+      nav: 'none'                        no bar (login, landing)
+      nav: 'assessment'                  seal + title + counter + timer
+      nav: 'admin'                       seal + title + admin links
+      navTitle, navCounter, navDeadline  optional detail
+
+    Omitting `nav` gives the plain institutional bar.
+  %>
+  <% const navVariant = typeof nav !== 'undefined' ? nav : 'default'; %>
+  <% if (navVariant !== 'none') { %>
+  <nav class="site-nav" aria-label="Primary">
+    <div class="site-nav-inner">
+      <a href="/" class="row" style="text-decoration:none;gap:10px">
+        <span class="nav-seal" aria-hidden="true">A</span>
+        <span class="nav-title" style="color:#E6EBE4">
+          <%= typeof navTitle !== 'undefined' ? navTitle : 'ATI ZMATF' %>
+        </span>
+      </a>
+
+      <span class="row-end"></span>
+
+      <% if (navVariant === 'assessment') { %>
+        <% if (typeof navCounter !== 'undefined') { %>
+          <span class="font-mono" style="font-size:13px;color:#B4C0B7"><%= navCounter %></span>
+        <% } %>
+        <%#
+          The countdown never pulses, flashes, or turns red. public/js/timer.js
+          adds .is-low at the two-minute mark, which shifts it to a calm amber
+          and stops there. Manufacturing anxiety during a timed assessment is a
+          design failure, not a feature.
+
+          data-deadline is the server-issued ISO deadline. The client renders
+          from it but the server remains authoritative on expiry.
+        %>
+        <span class="timer-display font-mono"
+              id="assessment-timer"
+              role="timer"
+              aria-live="off"
+              <% if (typeof navDeadline !== 'undefined') { %>data-deadline="<%= navDeadline %>"<% } %>>
+          --:--
+        </span>
+        <span class="visually-hidden" id="timer-announcer" aria-live="polite"></span>
+
+      <% } else if (navVariant === 'admin') { %>
+        <a href="/admin/dashboard">Dashboard</a>
+        <a href="/admin/participants">Roster</a>
+        <a href="/admin/analytics">Analytics</a>
+        <form method="POST" action="/logout" style="display:inline">
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% } %>
+          <button type="submit" class="btn btn-sm btn-dark">Sign out</button>
+        </form>
+
+      <% } else if (typeof user !== 'undefined' && user) { %>
+        <span class="font-mono" style="font-size:12px;color:#9CAAA1">
+          #<%= user.participant_number %>
+        </span>
+        <form method="POST" action="/logout" style="display:inline">
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% } %>
+          <button type="submit" class="btn btn-sm btn-dark">Sign out</button>
+        </form>
+      <% } %>
+    </div>
+  </nav>
+  <% } %>
+
+  <main class="page" id="main-content">
+    <%#
+      Flash messaging. Routes may set `error` or `success` as plain strings.
+      Errors state what went wrong and how to fix it.
+    %>
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div class="container" style="padding-top:var(--sp-4)">
+        <div class="alert alert-danger" role="alert"><%= error %></div>
+      </div>
+    <% } %>
+    <% if (typeof success !== 'undefined' && success) { %>
+      <div class="container" style="padding-top:var(--sp-4)">
+        <div class="alert alert-success" role="status"><%= success %></div>
+      </div>
+    <% } %>
+
+    <%- body %>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container row">
+      <span class="font-mono" style="font-size:12px">
+        &copy; <%= new Date().getFullYear() %> Africa Transformational Initiative
+      </span>
+      <span class="row-end"></span>
+      <span class="font-mono" style="font-size:11px;color:#6F7E75">
+        ZMATF Executive Training Programme
+      </span>
+    </div>
+  </footer>
+
+  <%#
+    Page scripts. Routes opt in via a `scripts` array of paths, e.g.
+      scripts: ['/js/timer.js', '/js/assessment.js']
+    Nothing is loaded globally, so the landing and login screens ship no JS.
+  %>
+  <% if (typeof scripts !== 'undefined' && Array.isArray(scripts)) { %>
+    <% scripts.forEach(function (src) { %>
+      <script src="<%= src %>" defer></script>
+    <% }); %>
+  <% } %>
+</body>
+</html>

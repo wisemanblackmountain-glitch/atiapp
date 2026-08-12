@@ -1,0 +1,37 @@
+<%#
+  Error page — rendered by the 404 and 500 handlers in server.js.
+  Receives `title` and `message`.
+
+  Copy states what happened and what to do next. It never exposes stack traces,
+  route internals, or whether a participant record exists.
+%>
+
+<div class="container container-narrow section">
+  <div class="card card-lg">
+
+    <div class="label-meta">
+      <%= typeof title !== 'undefined' && title === 'Not Found' ? 'Error 404' : 'Error 500' %>
+    </div>
+
+    <h1 style="font-size:clamp(26px,3.4vw,34px)">
+      <%= typeof title !== 'undefined' ? title : 'Something went wrong' %>
+    </h1>
+
+    <p class="text-muted" style="font-size:16px">
+      <%= typeof message !== 'undefined' ? message : 'An unexpected error occurred. Please try again.' %>
+    </p>
+
+    <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+      <a href="/" class="btn btn-terracotta">Return to start</a>
+      <% if (typeof user !== 'undefined' && user) { %>
+        <a href="/assessment/instructions" class="btn btn-ghost">Back to assessment</a>
+      <% } %>
+    </div>
+
+    <p class="text-faint" style="font-size:13px;margin-top:var(--sp-5);margin-bottom:0">
+      If this keeps happening, contact the programme secretariat. Your answers are
+      saved as you go, so nothing you have already submitted is lost.
+    </p>
+
+  </div>
+</div>
