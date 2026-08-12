@@ -1,0 +1,144 @@
+<%#
+  COHORT ANALYTICS
+
+  Route:  GET /admin/analytics
+          GET /admin/analytics/export.csv   (CSV dataset)
+  Layout: nav: 'admin', navTitle: 'Administration'
+
+  Locals
+    title      String
+    summary    Object  { attempts, mean_score, median_score, highest, lowest }
+                       Numbers, or null when attempts is 0.
+    histogram  Array   [ { score: 0..20, count: Int } ]  all 21 buckets, ascending
+    items      Array   [ { question_number, section_label, question_text,
+                           correct_count, attempted_count, difficulty_percent } ]
+                       difficulty_percent = correct_count / attempted_count * 100,
+                       rounded. Lower means harder.
+
+  Aggregate only. No officer is identifiable from this page, and correct option
+  text is not shown — only how many got each item right.
+%>
+
+<div class="container section">
+
+  <div class="row" style="margin-bottom:var(--sp-5)">
+    <div>
+      <span class="label-meta">Cohort analytics</span>
+      <h1 style="font-size:clamp(26px,3.4vw,34px);margin:0">Score distribution &amp; item difficulty</h1>
+    </div>
+    <span class="row-end"></span>
+    <a href="/admin/analytics/export.csv" class="btn btn-ghost btn-sm">Export CSV</a>
+  </div>
+
+  <% if (summary.attempts === 0) { %>
+    <div class="card">
+      <h3>No completed assessments yet</h3>
+      <p class="text-muted" style="font-size:15px;margin:0">
+        Analytics appear once officers begin submitting. Track progress on the
+        <a href="/admin/dashboard">dashboard</a>.
+      </p>
+    </div>
+  <% } else { %>
+
+    <div class="metric-grid" style="margin-bottom:var(--sp-6)">
+      <div class="metric">
+        <span class="metric-value"><%= summary.attempts %></span>
+        <div class="metric-label">Attempts scored</div>
+      </div>
+      <div class="metric">
+        <span class="metric-value"><%= summary.mean_score %></span>
+        <div class="metric-label">Mean of 20</div>
+      </div>
+      <div class="metric">
+        <span class="metric-value"><%= summary.highest %></span>
+        <div class="metric-label">Highest</div>
+      </div>
+      <div class="metric">
+        <span class="metric-value"><%= summary.lowest %></span>
+        <div class="metric-label">Lowest</div>
+      </div>
+    </div>
+
+    <%
+      // Tallest bucket sets the scale so short bars stay visible.
+      var peak = 1;
+      histogram.forEach(function (b) { if (b.count > peak) peak = b.count; });
+    %>
+
+    <div class="card" style="margin-bottom:var(--sp-4)">
+      <h3>Score frequency</h3>
+      <p class="text-muted" style="font-size:13.5px;margin-bottom:var(--sp-5)">
+        Number of officers achieving each score out of 20.
+      </p>
+
+      <div class="row" style="gap:3px;align-items:flex-end;height:160px;overflow-x:auto;padding-bottom:var(--sp-2)">
+        <% histogram.forEach(function (bucket) { %>
+          <div style="flex:1;min-width:22px;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end">
+            <span class="font-mono text-faint" style="font-size:10px">
+              <%= bucket.count > 0 ? bucket.count : '' %>
+            </span>
+            <div style="width:100%;height:<%= Math.round((bucket.count / peak) * 110) %>px;
+                        min-height:<%= bucket.count > 0 ? 4 : 1 %>px;
+                        background:<%= bucket.count > 0 ? 'var(--accent-fill)' : 'var(--border)' %>;
+                        border-radius:var(--r-xs) var(--r-xs) 2px 2px;"
+                 role="img"
+                 aria-label="Score <%= bucket.score %>: <%= bucket.count %> officers"></div>
+            <span class="font-mono text-muted" style="font-size:10px"><%= bucket.score %></span>
+          </div>
+        <% }); %>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:var(--sp-3)">
+      <h3 style="margin:0">Item difficulty</h3>
+      <span class="row-end"></span>
+      <span class="text-faint" style="font-size:12.5px">Lower percentage means harder</span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <caption class="visually-hidden">
+          Percentage of officers answering each question correctly
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Q</th>
+            <th scope="col">Sec</th>
+            <th scope="col">Question</th>
+            <th scope="col" class="num">Correct</th>
+            <th scope="col" class="num">Difficulty</th>
+            <th scope="col">Band</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% items.forEach(function (item) { %>
+            <tr>
+              <td class="font-mono"><%= String(item.question_number).padStart(2, '0') %></td>
+              <td class="font-mono"><%= item.section_label %></td>
+              <td style="max-width:360px"><%= item.question_text %></td>
+              <td class="num font-mono"><%= item.correct_count %> / <%= item.attempted_count %></td>
+              <td class="num font-mono"><%= item.difficulty_percent %>%</td>
+              <td>
+                <% if (item.difficulty_percent < 40) { %>
+                  <span class="badge badge-warning">HARD</span>
+                <% } else if (item.difficulty_percent < 70) { %>
+                  <span class="badge badge-accent">MODERATE</span>
+                <% } else { %>
+                  <span class="badge badge-success">STRAIGHTFORWARD</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-faint" style="font-size:12.5px;margin-top:var(--sp-4)">
+      Items below 40% are candidates for emphasis during the training modules.
+      Because option order is randomised per officer, difficulty reflects the
+      content rather than any positional bias.
+    </p>
+
+  <% } %>
+
+</div>

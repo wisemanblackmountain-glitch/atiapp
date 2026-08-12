@@ -1,0 +1,127 @@
+<%#
+  PARTICIPANT ROSTER
+
+  Route:  GET /admin/participants?q=&status=
+  Layout: nav: 'admin', navTitle: 'Administration'
+
+  Locals
+    title         String
+    participants  Array   [ { participant_number, full_name, title, agency,
+                              status: 'NOT_STARTED'|'IN_PROGRESS'|'COMPLETED'|'TIMED_OUT',
+                              score: Int?, total_marks: Int?, percentage: Int?,
+                              knowledge_level: String? } ]
+                          Score fields are null unless status is COMPLETED or TIMED_OUT.
+    filters       Object  { q: String, status: String }  echoed back into the controls
+    total         Int     roster size before filtering
+
+  Filtering is server-side via querystring so results are linkable and the view
+  stays free of logic. This table is fully opaque and never uses clay — it is
+  read, not pressed.
+%>
+
+<div class="container section">
+
+  <div class="row" style="margin-bottom:var(--sp-4)">
+    <div>
+      <span class="label-meta">Roster</span>
+      <h1 style="font-size:clamp(26px,3.4vw,34px);margin:0">Authorised officers</h1>
+    </div>
+    <span class="row-end"></span>
+    <span class="text-muted font-mono" style="font-size:13px">
+      <%= participants.length %> of <%= total %>
+    </span>
+  </div>
+
+  <form method="GET" action="/admin/participants" class="card" style="margin-bottom:var(--sp-4)">
+    <div class="row" style="gap:var(--sp-3);align-items:flex-end">
+      <div class="form-group" style="flex:2;min-width:200px;margin:0">
+        <label for="q" class="form-label"><span>Search</span></label>
+        <input type="search" id="q" name="q" class="form-input"
+               placeholder="Name, agency or number"
+               value="<%= filters.q || '' %>">
+      </div>
+
+      <div class="form-group" style="flex:1;min-width:170px;margin:0">
+        <label for="status" class="form-label"><span>Status</span></label>
+        <select id="status" name="status" class="form-input">
+          <option value=""            <%= filters.status === ''            ? 'selected' : '' %>>All statuses</option>
+          <option value="NOT_STARTED" <%= filters.status === 'NOT_STARTED' ? 'selected' : '' %>>Not started</option>
+          <option value="IN_PROGRESS" <%= filters.status === 'IN_PROGRESS' ? 'selected' : '' %>>In progress</option>
+          <option value="COMPLETED"   <%= filters.status === 'COMPLETED'   ? 'selected' : '' %>>Completed</option>
+          <option value="TIMED_OUT"   <%= filters.status === 'TIMED_OUT'   ? 'selected' : '' %>>Timed out</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-terracotta">Apply</button>
+      <% if (filters.q || filters.status) { %>
+        <a href="/admin/participants" class="btn btn-ghost">Clear</a>
+      <% } %>
+    </div>
+  </form>
+
+  <% if (participants.length === 0) { %>
+    <div class="card">
+      <h3>No officers match those filters</h3>
+      <p class="text-muted" style="font-size:15px;margin:0">
+        Try a different search term, or clear the filters to see the full roster of <%= total %>.
+      </p>
+    </div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="data-table">
+        <caption class="visually-hidden">
+          Roster of authorised officers with assessment status and score
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Officer</th>
+            <th scope="col">Agency</th>
+            <th scope="col">Status</th>
+            <th scope="col" class="num">Score</th>
+            <th scope="col">Level</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% participants.forEach(function (p) { %>
+            <tr>
+              <td class="font-mono"><%= String(p.participant_number).padStart(2, '0') %></td>
+              <td>
+                <div style="font-weight:650"><%= p.full_name %></div>
+                <div class="text-faint" style="font-size:12px"><%= p.title %></div>
+              </td>
+              <td><%= p.agency %></td>
+              <td>
+                <% if (p.status === 'COMPLETED') { %>
+                  <span class="badge badge-success">COMPLETED</span>
+                <% } else if (p.status === 'TIMED_OUT') { %>
+                  <span class="badge badge-warning">TIMED OUT</span>
+                <% } else if (p.status === 'IN_PROGRESS') { %>
+                  <span class="badge badge-accent">IN PROGRESS</span>
+                <% } else { %>
+                  <span class="badge">NOT STARTED</span>
+                <% } %>
+              </td>
+              <td class="num font-mono">
+                <%= p.score === null || typeof p.score === 'undefined'
+                      ? '—'
+                      : p.score + ' / ' + p.total_marks %>
+              </td>
+              <td><%= p.knowledge_level || '—' %></td>
+              <td>
+                <% if (p.status === 'COMPLETED' || p.status === 'TIMED_OUT') { %>
+                  <a href="/admin/results/<%= p.participant_number %>"
+                     aria-label="View report for participant <%= p.participant_number %>">Report</a>
+                <% } else { %>
+                  <span class="text-faint">—</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+
+</div>

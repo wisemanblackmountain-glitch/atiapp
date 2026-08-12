@@ -1,0 +1,126 @@
+<%#
+  QUESTION CANVAS
+
+  Route:   GET  /assessment/questions/:number   (1..20)
+           POST /assessment/save-answer         JSON { questionId, selectedPosition }  [LOCKED §14]
+                                                header X-CSRF-Token
+  Layout:  nav: 'assessment', navCounter, navDeadline
+           scripts: ['/js/timer.js', '/js/assessment.js']
+
+  Locals
+    title            String
+    csrfToken        String
+    question         Object   { id, question_number, section_label, question_text }
+    choices          Array    [ { position: 'A'|'B'|'C'|'D', text: String } ]
+                              ORDER IS THE DISPLAY ORDER already resolved through
+                              randomized_mappings. Positions are display positions,
+                              NOT original option letters.
+    selectedPosition String?  'A'|'B'|'C'|'D' or null
+    progress         Object   { answered: Int, total: Int,
+                                items: [ { number: Int, answered: Bool } ] }
+    prevNumber       Int?     null on question 1
+    nextNumber       Int?     null on question 20
+
+  ── ANSWER KEY PRIVACY ─────────────────────────────────────────────────────
+  `choices` must contain ONLY position and text. No option_id, no is_correct,
+  no original_position. Nothing on this page, in any attribute or script, may
+  let a participant infer the correct answer. Scoring resolves display position
+  back to the option id server-side. See DEVELOPER_HANDOFF §8.1 and §14.4.
+  ────────────────────────────────────────────────────────────────────────────
+%>
+
+<div class="container section">
+  <div class="workspace">
+
+    <div>
+      <div class="row" style="gap:var(--sp-3);margin-bottom:var(--sp-3)">
+        <span class="badge badge-accent">SECTION <%= question.section_label %></span>
+        <span class="badge">QUESTION <%= String(question.question_number).padStart(2, '0') %></span>
+        <span class="badge">1 MARK</span>
+      </div>
+
+      <h1 style="font-size:clamp(21px,2.6vw,27px);margin-bottom:var(--sp-5)">
+        <%= question.question_text %>
+      </h1>
+
+      <div role="radiogroup"
+           aria-label="Answer options for question <%= question.question_number %>"
+           id="option-group"
+           data-question-id="<%= question.id %>">
+
+        <% choices.forEach(function (option) { %>
+          <% var isSelected = (typeof selectedPosition !== 'undefined' && selectedPosition === option.position); %>
+          <button type="button"
+                  class="option-btn <%= isSelected ? 'selected' : '' %>"
+                  role="radio"
+                  aria-checked="<%= isSelected ? 'true' : 'false' %>"
+                  data-position="<%= option.position %>"
+                  data-question-id="<%= question.id %>">
+            <span class="option-letter-badge font-mono" aria-hidden="true"><%= option.position %></span>
+            <span class="option-text"><%= option.text %></span>
+            <span class="option-radio-check" aria-hidden="true">
+              <span class="radio-inner"></span>
+            </span>
+          </button>
+        <% }); %>
+
+      </div>
+
+      <%# Save state is announced politely so it never interrupts reading. %>
+      <p class="text-faint" style="font-size:13px;margin-top:var(--sp-3)"
+         id="save-status" role="status" aria-live="polite">
+        Answers save automatically.
+      </p>
+
+      <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+        <% if (prevNumber) { %>
+          <a href="/assessment/questions/<%= prevNumber %>" class="btn btn-ghost">Previous</a>
+        <% } %>
+
+        <% if (nextNumber) { %>
+          <a href="/assessment/questions/<%= nextNumber %>" class="btn btn-terracotta">
+            <span>Next question</span>
+            <svg class="btn-arrow" width="18" height="18" viewBox="0 0 20 20"
+                 fill="none" aria-hidden="true" focusable="false">
+              <path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        <% } else { %>
+          <a href="/assessment/review" class="btn btn-terracotta">
+            <span>Review answers</span>
+            <svg class="btn-arrow" width="18" height="18" viewBox="0 0 20 20"
+                 fill="none" aria-hidden="true" focusable="false">
+              <path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        <% } %>
+      </div>
+    </div>
+
+    <aside class="workspace-aside" aria-label="Question navigator">
+      <span class="label-meta">Progress</span>
+
+      <div class="progress-grid">
+        <% progress.items.forEach(function (item) { %>
+          <a href="/assessment/questions/<%= item.number %>"
+             class="progress-dot <%= item.number === question.question_number ? 'is-current' : (item.answered ? 'is-answered' : '') %>"
+             aria-label="Question <%= item.number %><%= item.answered ? ', answered' : ', not answered' %><%= item.number === question.question_number ? ', current' : '' %>"
+             <%= item.number === question.question_number ? 'aria-current="true"' : '' %>>
+            <%= item.number %>
+          </a>
+        <% }); %>
+      </div>
+
+      <p class="text-muted" style="font-size:13px;margin-top:var(--sp-4)">
+        <span class="font-mono"><%= progress.answered %></span> answered &middot;
+        <span class="font-mono"><%= progress.total - progress.answered %></span> remaining
+      </p>
+
+      <a href="/assessment/review" class="btn btn-ghost btn-sm btn-block"
+         style="margin-top:var(--sp-3)">Go to review</a>
+    </aside>
+
+  </div>
+</div>

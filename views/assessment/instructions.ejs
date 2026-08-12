@@ -1,0 +1,105 @@
+<%#
+  EXECUTIVE BRIEFING
+
+  Route:   GET  /assessment/instructions
+           POST /assessment/start   → creates the attempt, stamps started_at and
+                                      deadline_at (+10 min), assigns the 20
+                                      randomised permutations, redirects to
+                                      /assessment/questions/1
+  Layout:  nav: 'default'
+
+  Locals
+    title        String
+    csrfToken    String
+    participant  Object   { full_name, participant_number }
+    resuming     Boolean? true when an IN_PROGRESS attempt already exists.
+                          The submit button becomes "Resume assessment" and
+                          POST /assessment/start must NOT reset the deadline.
+
+  This is the last screen before the clock starts. It says so plainly rather
+  than burying it.
+%>
+
+<div class="container container-narrow section">
+
+  <div class="label-meta">Step 2 of 3 &middot; Briefing</div>
+  <h1 style="font-size:clamp(26px,3.4vw,34px)">Before you begin</h1>
+  <p class="text-muted" style="font-size:16px;margin-bottom:var(--sp-5)">
+    Read this carefully. Once you start, the timer runs continuously and cannot
+    be paused.
+  </p>
+
+  <div class="metric-grid" style="margin-bottom:var(--sp-5)">
+    <div class="metric">
+      <span class="metric-value">20</span>
+      <div class="metric-label">Questions</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value">10</span>
+      <div class="metric-label">Minutes</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value">20</span>
+      <div class="metric-label">Total marks</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value">01</span>
+      <div class="metric-label">Attempt</div>
+    </div>
+  </div>
+
+  <div class="card card-lg">
+    <h3>Structure</h3>
+    <div class="row" style="gap:var(--sp-3);align-items:stretch;margin-bottom:var(--sp-5)">
+      <div class="card card-sunk" style="flex:1;min-width:200px;padding:var(--sp-4)">
+        <span class="badge badge-accent">SECTION A</span>
+        <p class="text-muted" style="font-size:14px;margin:var(--sp-3) 0 0">
+          Questions 1&ndash;10 &middot; 10 marks
+        </p>
+      </div>
+      <div class="card card-sunk" style="flex:1;min-width:200px;padding:var(--sp-4)">
+        <span class="badge badge-accent">SECTION B</span>
+        <p class="text-muted" style="font-size:14px;margin:var(--sp-3) 0 0">
+          Questions 11&ndash;20 &middot; 10 marks
+        </p>
+      </div>
+    </div>
+
+    <h3>How it works</h3>
+    <ul class="text-muted" style="font-size:15px;padding-left:var(--sp-5);margin:0 0 var(--sp-5)">
+      <li style="margin-bottom:var(--sp-2)">Each question has four options. Select one.</li>
+      <li style="margin-bottom:var(--sp-2)">Answers save automatically as you select them. There is no save button.</li>
+      <li style="margin-bottom:var(--sp-2)">You may move backwards and forwards, and change any answer until you submit.</li>
+      <li style="margin-bottom:var(--sp-2)">Option order is randomised per officer, so your option B is not your neighbour's option B.</li>
+      <li>Unanswered questions score zero. There is no penalty for a wrong answer, so answer everything.</li>
+    </ul>
+
+    <h3>When time runs out</h3>
+    <p class="text-muted" style="font-size:15px;margin-bottom:0">
+      At ten minutes the assessment submits itself automatically with whatever
+      you have answered so far. The timer turns amber at two minutes remaining.
+    </p>
+  </div>
+
+  <div class="alert" style="margin-top:var(--sp-4)">
+    This is a baseline diagnostic, not a pass or fail examination. It measures
+    where the cohort is starting from so the training can be pitched correctly.
+    Correct answers are never shown to participants.
+  </div>
+
+  <form method="POST" action="/assessment/start" style="margin-top:var(--sp-5)">
+    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <div class="row" style="gap:var(--sp-3)">
+      <button type="submit" class="btn btn-terracotta btn-lg">
+        <span><%= typeof resuming !== 'undefined' && resuming ? 'Resume assessment' : 'Start the ten minutes' %></span>
+        <svg class="btn-arrow" width="18" height="18" viewBox="0 0 20 20"
+             fill="none" aria-hidden="true" focusable="false">
+          <path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <a href="/assessment/confirm" class="btn btn-ghost">Back</a>
+    </div>
+  </form>
+
+</div>

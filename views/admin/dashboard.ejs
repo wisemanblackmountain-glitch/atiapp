@@ -1,0 +1,116 @@
+<%#
+  ADMIN DASHBOARD
+
+  Route:  GET /admin/dashboard
+  Layout: nav: 'admin', navTitle: 'Administration'
+
+  Locals
+    title         String
+    metrics       Object  { roster, completed, in_progress, not_started,
+                            mean_score, mean_percentage }
+                          mean_score is a Number to 1dp; null when no attempts exist.
+    distribution  Array   [ { level: 'ADVANCED'|'COMPETENT'|'DEVELOPING'|'FOUNDATIONAL',
+                              count: Int, percent: Int } ]
+                          Always all four levels, in that order, including zeros.
+%>
+
+<div class="container section">
+
+  <div class="row" style="margin-bottom:var(--sp-5)">
+    <div>
+      <span class="label-meta">Cohort monitoring</span>
+      <h1 style="font-size:clamp(26px,3.4vw,34px);margin:0">Assessment status</h1>
+    </div>
+    <span class="row-end"></span>
+    <a href="/admin/participants" class="btn btn-ghost btn-sm">View roster</a>
+    <a href="/admin/analytics" class="btn btn-terracotta btn-sm">Analytics</a>
+  </div>
+
+  <div class="metric-grid" style="margin-bottom:var(--sp-6)">
+    <div class="metric">
+      <span class="metric-value"><%= metrics.roster %></span>
+      <div class="metric-label">Authorised officers</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value"><%= String(metrics.completed).padStart(2, '0') %></span>
+      <div class="metric-label">Completed</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value"><%= String(metrics.in_progress).padStart(2, '0') %></span>
+      <div class="metric-label">In progress</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value"><%= metrics.mean_score === null ? '—' : metrics.mean_score %></span>
+      <div class="metric-label">Mean score of 20</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:var(--sp-4)">
+      <h3 style="margin:0">Knowledge level distribution</h3>
+      <span class="row-end"></span>
+      <span class="text-faint font-mono" style="font-size:12px">
+        <%= metrics.completed %> completed
+      </span>
+    </div>
+
+    <% if (metrics.completed === 0) { %>
+      <p class="text-muted" style="font-size:15px;margin:0">
+        No assessments have been submitted yet. Distribution appears once officers begin completing.
+      </p>
+    <% } else { %>
+      <div class="stack" style="gap:var(--sp-4)">
+        <% distribution.forEach(function (band) { %>
+          <div>
+            <div class="row" style="margin-bottom:var(--sp-2)">
+              <span style="font-size:14px;font-weight:650"><%= band.level %></span>
+              <span class="row-end"></span>
+              <span class="font-mono text-muted" style="font-size:13px">
+                <%= band.count %> &middot; <%= band.percent %>%
+              </span>
+            </div>
+            <div class="score-meter"
+                 role="img"
+                 aria-label="<%= band.level %>: <%= band.count %> officers, <%= band.percent %> percent">
+              <div class="score-meter-fill" style="width:<%= band.percent %>%"></div>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+
+      <p class="text-faint" style="font-size:12.5px;margin:var(--sp-4) 0 0">
+        ADVANCED 17&ndash;20 &middot; COMPETENT 13&ndash;16 &middot; DEVELOPING 9&ndash;12 &middot; FOUNDATIONAL 0&ndash;8
+      </p>
+    <% } %>
+  </div>
+
+  <div class="row" style="gap:var(--sp-3);align-items:stretch;margin-top:var(--sp-4)">
+    <a href="/admin/participants?status=NOT_STARTED"
+       class="card card-interactive" style="flex:1;min-width:220px;text-decoration:none;color:inherit">
+      <span class="label-meta" style="margin-bottom:var(--sp-2)">Follow up</span>
+      <div style="font-size:16px;font-weight:650"><%= metrics.not_started %> not started</div>
+      <p class="text-muted" style="font-size:13px;margin:var(--sp-2) 0 0">
+        Officers who have not yet signed in.
+      </p>
+    </a>
+
+    <a href="/admin/participants?status=IN_PROGRESS"
+       class="card card-interactive" style="flex:1;min-width:220px;text-decoration:none;color:inherit">
+      <span class="label-meta" style="margin-bottom:var(--sp-2)">Monitor</span>
+      <div style="font-size:16px;font-weight:650"><%= metrics.in_progress %> in progress</div>
+      <p class="text-muted" style="font-size:13px;margin:var(--sp-2) 0 0">
+        Currently within their ten minutes.
+      </p>
+    </a>
+
+    <a href="/admin/analytics"
+       class="card card-interactive" style="flex:1;min-width:220px;text-decoration:none;color:inherit">
+      <span class="label-meta" style="margin-bottom:var(--sp-2)">Analyse</span>
+      <div style="font-size:16px;font-weight:650">Item difficulty</div>
+      <p class="text-muted" style="font-size:13px;margin:var(--sp-2) 0 0">
+        Which questions the cohort found hardest.
+      </p>
+    </a>
+  </div>
+
+</div>

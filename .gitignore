@@ -29,6 +29,7 @@ database/*.db-shm
 # would serve it as a public route.
 public/qa.html
 public/render-*.html
+public/r-*.html
 
 # ── Logs & OS cruft ────────────────────────────────────────
 *.log

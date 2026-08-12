@@ -1,0 +1,139 @@
+<%#
+  REVIEW & SUBMIT
+
+  Route:   GET  /assessment/review
+           POST /assessment/submit   [LOCKED §14]
+  Layout:  nav: 'assessment', navDeadline
+           scripts: ['/js/timer.js']
+
+  Locals
+    title      String
+    csrfToken  String
+    stats      Object  { total: Int, answered: Int, unanswered: Int }
+    items      Array   [ { number: Int, section_label: 'A'|'B', answered: Bool } ]
+    deadline   String  ISO timestamp, for the remaining-time figure
+
+  Shows WHICH questions are unanswered, never what was answered with. No option
+  text and no correctness indicator appears here.
+
+  The confirmation modal is rendered inline and toggled with the `hidden`
+  attribute, so submission still works with JavaScript disabled: the form posts
+  directly and the server is authoritative.
+%>
+
+<div class="container section">
+
+  <h1 style="font-size:clamp(26px,3.4vw,34px)">Review your answers</h1>
+  <p class="text-muted" style="font-size:16px;margin-bottom:var(--sp-5)">
+    Select any question number to go back and change your answer. Nothing is
+    final until you submit.
+  </p>
+
+  <div class="metric-grid" style="margin-bottom:var(--sp-5)">
+    <div class="metric">
+      <span class="metric-value"><%= stats.total %></span>
+      <div class="metric-label">Questions</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value"><%= String(stats.answered).padStart(2, '0') %></span>
+      <div class="metric-label">Answered</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value"><%= String(stats.unanswered).padStart(2, '0') %></span>
+      <div class="metric-label">Unanswered</div>
+    </div>
+    <div class="metric">
+      <span class="metric-value font-mono" id="review-remaining">--:--</span>
+      <div class="metric-label">Remaining</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label-meta">All questions</span>
+    <div class="progress-grid" style="max-width:560px;margin-top:var(--sp-2)">
+      <% items.forEach(function (item) { %>
+        <a href="/assessment/questions/<%= item.number %>"
+           class="progress-dot <%= item.answered ? 'is-answered' : '' %>"
+           aria-label="Question <%= item.number %>, section <%= item.section_label %><%= item.answered ? ', answered' : ', not answered' %>">
+          <%= item.number %>
+        </a>
+      <% }); %>
+    </div>
+
+    <p class="text-muted" style="font-size:13px;margin:var(--sp-4) 0 0">
+      Filled squares are answered. Empty squares are not.
+    </p>
+  </div>
+
+  <% if (stats.unanswered > 0) { %>
+    <div class="alert alert-danger" style="margin-top:var(--sp-4)" role="alert">
+      <strong><%= stats.unanswered %></strong>
+      <%= stats.unanswered === 1 ? 'question is' : 'questions are' %> still unanswered.
+      Unanswered questions score zero, and there is no penalty for guessing.
+    </div>
+  <% } else { %>
+    <div class="alert alert-success" style="margin-top:var(--sp-4)" role="status">
+      All <%= stats.total %> questions answered.
+    </div>
+  <% } %>
+
+  <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+    <button type="button" class="btn btn-terracotta btn-lg" id="open-submit"
+            aria-haspopup="dialog" aria-controls="submit-dialog">
+      Submit assessment
+    </button>
+    <a href="/assessment/questions/1" class="btn btn-ghost">Back to question 1</a>
+  </div>
+
+</div>
+
+<div class="modal-scrim" id="submit-dialog" hidden>
+  <div class="modal" role="dialog" aria-modal="true"
+       aria-labelledby="submit-dialog-title" aria-describedby="submit-dialog-desc">
+
+    <h2 id="submit-dialog-title" style="font-size:21px">Submit your assessment?</h2>
+
+    <p id="submit-dialog-desc" class="text-muted" style="font-size:15px">
+      <% if (stats.unanswered > 0) { %>
+        <%= stats.unanswered %>
+        <%= stats.unanswered === 1 ? 'question remains' : 'questions remain' %> unanswered.
+      <% } %>
+      Once submitted, your responses are final and cannot be changed.
+    </p>
+
+    <form method="POST" action="/assessment/submit">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+      <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+        <button type="button" class="btn btn-ghost" id="close-submit">Keep reviewing</button>
+        <button type="submit" class="btn btn-terracotta">Submit</button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var dialog = document.getElementById('submit-dialog');
+    var open   = document.getElementById('open-submit');
+    var close  = document.getElementById('close-submit');
+    var lastFocus = null;
+
+    function show() {
+      lastFocus = document.activeElement;
+      dialog.hidden = false;
+      close.focus();
+    }
+    function hide() {
+      dialog.hidden = true;
+      if (lastFocus) lastFocus.focus();
+    }
+
+    open.addEventListener('click', show);
+    close.addEventListener('click', hide);
+    dialog.addEventListener('click', function (e) { if (e.target === dialog) hide(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !dialog.hidden) hide();
+    });
+  })();
+</script>

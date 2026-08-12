@@ -1,0 +1,150 @@
+<%#
+  ═══════════════════════════════════════════════════════════════════════════
+  INDIVIDUAL OFFICER REPORT  —  ADMINISTRATOR ONLY
+
+  ⚠  THIS IS THE ONLY VIEW IN THE APPLICATION THAT RENDERS ANSWER KEYS.
+
+  The `responses` local carries correct_option_text and is_correct. It must be
+  built exclusively inside an admin-guarded route and must NEVER be passed to
+  any view under views/assessment/.
+
+  Do not extract this audit table into a shared partial. If a participant view
+  ever reuses it, the answer key leaks to the people being assessed and the
+  instrument is compromised. Duplication is the correct trade here.
+  See DEVELOPER_HANDOFF §14.4.
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Route:  GET /admin/results/:participantNumber
+  Layout: nav: 'admin', navTitle: 'Administration'
+
+  Locals
+    title        String
+    participant  Object  { participant_number, full_name, title, agency }
+    attempt      Object  { score, total_marks, percentage, knowledge_level,
+                           knowledge_interpretation, status, started_at, submitted_at }
+    responses    Array   [ { question_number, section_label, question_text,
+                             selected_display_position: 'A'|'B'|'C'|'D'|null,
+                             selected_option_text: String|null,
+                             correct_option_text: String,
+                             is_correct: Bool|null } ]
+                         is_correct is null when unanswered.
+%>
+
+<div class="container section">
+
+  <div class="row" style="margin-bottom:var(--sp-4)">
+    <div>
+      <span class="label-meta">Officer report</span>
+      <h1 style="font-size:clamp(24px,3vw,32px);margin:0"><%= participant.full_name %></h1>
+    </div>
+    <span class="row-end"></span>
+    <a href="/admin/participants" class="btn btn-ghost btn-sm">Back to roster</a>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--sp-4)">
+    <div class="row" style="gap:var(--sp-6);flex-wrap:wrap">
+      <div>
+        <span class="label-meta" style="margin-bottom:2px">Participant</span>
+        <span class="font-mono" style="font-size:16px;font-weight:600">
+          #<%= participant.participant_number %>
+        </span>
+      </div>
+      <div>
+        <span class="label-meta" style="margin-bottom:2px">Designation</span>
+        <span style="font-size:15px"><%= participant.title %></span>
+      </div>
+      <div>
+        <span class="label-meta" style="margin-bottom:2px">Agency</span>
+        <span style="font-size:15px"><%= participant.agency %></span>
+      </div>
+      <div>
+        <span class="label-meta" style="margin-bottom:2px">Status</span>
+        <% if (attempt.status === 'TIMED_OUT') { %>
+          <span class="badge badge-warning">TIMED OUT</span>
+        <% } else { %>
+          <span class="badge badge-success">COMPLETED</span>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--sp-4)">
+    <span class="label-meta">Diagnostic benchmark</span>
+    <div class="row" style="gap:var(--sp-5);margin:var(--sp-3) 0 var(--sp-4)">
+      <div>
+        <span class="score-value"><%= attempt.score %></span><span class="score-total"> / <%= attempt.total_marks %></span>
+        <div class="text-muted font-mono" style="font-size:14px"><%= attempt.percentage %>%</div>
+      </div>
+      <div class="score-meter" role="img"
+           aria-label="Score <%= attempt.score %> of <%= attempt.total_marks %>">
+        <div class="score-meter-fill" style="width:<%= attempt.percentage %>%"></div>
+      </div>
+      <span class="badge badge-accent" style="font-size:12px;padding:6px 12px">
+        <%= attempt.knowledge_level %>
+      </span>
+    </div>
+    <p class="text-muted" style="font-size:14px;margin:0"><%= attempt.knowledge_interpretation %></p>
+    <p class="text-faint font-mono" style="font-size:12px;margin:var(--sp-4) 0 0">
+      Started <%= attempt.started_at %><% if (attempt.submitted_at) { %> &middot; submitted <%= attempt.submitted_at %><% } %>
+    </p>
+  </div>
+
+  <div class="row" style="margin-bottom:var(--sp-3)">
+    <h3 style="margin:0">Item-level audit</h3>
+    <span class="row-end"></span>
+    <span class="badge badge-warning">CONTAINS ANSWER KEY</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="visually-hidden">
+        Question-by-question responses with correct answers, administrator view only
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Q</th>
+          <th scope="col">Sec</th>
+          <th scope="col">Question</th>
+          <th scope="col">Selected</th>
+          <th scope="col">Correct answer</th>
+          <th scope="col">Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% responses.forEach(function (r) { %>
+          <tr>
+            <td class="font-mono"><%= String(r.question_number).padStart(2, '0') %></td>
+            <td class="font-mono"><%= r.section_label %></td>
+            <td style="max-width:320px"><%= r.question_text %></td>
+            <td>
+              <% if (r.selected_display_position) { %>
+                <span class="badge"><%= r.selected_display_position %></span>
+                <div class="text-faint" style="font-size:12px;margin-top:4px">
+                  <%= r.selected_option_text %>
+                </div>
+              <% } else { %>
+                <span class="text-faint">Not answered</span>
+              <% } %>
+            </td>
+            <td class="text-muted" style="font-size:13px"><%= r.correct_option_text %></td>
+            <td>
+              <% if (r.is_correct === null || typeof r.is_correct === 'undefined') { %>
+                <span class="badge">—</span>
+              <% } else if (r.is_correct) { %>
+                <span class="badge badge-success">CORRECT</span>
+              <% } else { %>
+                <span class="badge badge-warning">INCORRECT</span>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-faint" style="font-size:12.5px;margin-top:var(--sp-4)">
+    Selected letters are display positions from this officer's randomised option
+    order. They do not correspond to the original source lettering.
+  </p>
+
+</div>

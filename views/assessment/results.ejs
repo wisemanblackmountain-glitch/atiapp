@@ -1,0 +1,94 @@
+<%#
+  PARTICIPANT RESULTS
+
+  Route:  GET /assessment/results
+  Layout: nav: 'default'
+
+  Locals
+    title        String
+    participant  Object  { participant_number, full_name, title, agency }
+    attempt      Object  { score, total_marks, percentage, knowledge_level,
+                           knowledge_interpretation, status, submitted_at }
+                         status is 'COMPLETED' or 'TIMED_OUT'
+
+  ── ANSWER KEY PRIVACY ─────────────────────────────────────────────────────
+  This view shows the score, percentage and Knowledge Level only. It must never
+  receive or render per-question correctness, correct option text, or the
+  answer key. Item-level review is an administrator view
+  (admin/result-detail.ejs). See UI_HANDOFF §3.4.
+  ────────────────────────────────────────────────────────────────────────────
+%>
+
+<div class="container container-narrow section">
+
+  <div class="card card-lg">
+
+    <div class="row" style="gap:var(--sp-3);margin-bottom:var(--sp-4)">
+      <span class="label-meta" style="margin:0">Official diagnostic record</span>
+      <span class="row-end"></span>
+      <% if (attempt.status === 'TIMED_OUT') { %>
+        <span class="badge badge-warning">TIMED OUT</span>
+      <% } else { %>
+        <span class="badge badge-success">COMPLETED</span>
+      <% } %>
+    </div>
+
+    <h1 style="font-size:clamp(24px,3vw,32px);margin-bottom:var(--sp-2)">
+      Assessment complete
+    </h1>
+    <p class="text-muted" style="font-size:15px;margin-bottom:var(--sp-6)">
+      <%= participant.full_name %> &middot;
+      <span class="font-mono">#<%= participant.participant_number %></span> &middot;
+      <%= participant.agency %>
+    </p>
+
+    <div class="row" style="gap:var(--sp-5);margin-bottom:var(--sp-5)">
+      <div>
+        <span class="score-value"><%= attempt.score %></span><span class="score-total"> / <%= attempt.total_marks %></span>
+        <div class="text-muted font-mono" style="font-size:14px"><%= attempt.percentage %>%</div>
+      </div>
+
+      <div class="score-meter"
+           role="img"
+           aria-label="Score <%= attempt.score %> out of <%= attempt.total_marks %>, <%= attempt.percentage %> percent">
+        <div class="score-meter-fill" style="width:<%= attempt.percentage %>%"></div>
+      </div>
+
+      <span class="badge badge-accent" style="font-size:12px;padding:6px 12px">
+        <%= attempt.knowledge_level %>
+      </span>
+    </div>
+
+    <div class="card card-sunk" style="padding:var(--sp-4)">
+      <span class="label-meta" style="margin-bottom:var(--sp-2)">
+        Knowledge level &middot; <%= attempt.knowledge_level %>
+      </span>
+      <p style="font-size:15px;margin:0"><%= attempt.knowledge_interpretation %></p>
+    </div>
+
+    <% if (attempt.status === 'TIMED_OUT') { %>
+      <div class="alert alert-danger" style="margin-top:var(--sp-4)">
+        The ten minutes elapsed before you submitted. Your answers up to that
+        point were recorded and scored.
+      </div>
+    <% } %>
+
+    <p class="text-faint" style="font-size:13px;margin:var(--sp-5) 0 0">
+      This is a baseline diagnostic, not a pass or fail examination. It establishes
+      where the cohort is starting from so the training can be pitched correctly.
+      Correct answers are not disclosed.
+      <% if (attempt.submitted_at) { %>
+        <br>Submitted <span class="font-mono"><%= attempt.submitted_at %></span>.
+      <% } %>
+    </p>
+
+  </div>
+
+  <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+    <form method="POST" action="/logout" style="display:inline">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+      <button type="submit" class="btn btn-terracotta">Finish and sign out</button>
+    </form>
+  </div>
+
+</div>

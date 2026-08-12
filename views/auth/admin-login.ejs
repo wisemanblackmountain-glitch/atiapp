@@ -1,0 +1,64 @@
+<%#
+  ADMIN LOGIN
+
+  Route:   GET  /admin/login   → render
+           POST /admin/login   → { username, password }   [LOCKED §14]
+  Layout:  nav: 'none'
+
+  Locals
+    title        String
+    csrfToken    String
+    error        String?      rendered by the layout
+    lockedUntil  String?      set when the rate limiter has tripped
+
+  Restrained operational theme in Deep Forest Ink, deliberately plainer than the
+  participant login: this is a control surface, not a welcome.
+%>
+
+<div class="container container-narrow section">
+
+  <div class="card card-lg card-dark" style="max-width:440px;margin:0 auto">
+    <div class="row" style="gap:10px;margin-bottom:var(--sp-5)">
+      <span class="nav-seal" aria-hidden="true">A</span>
+      <span class="label-meta" style="margin:0;color:#8E9C93">Facilitator access</span>
+    </div>
+
+    <h1 style="font-size:24px;color:#F2F5F0">Administration</h1>
+    <p style="color:#9CAAA1;font-size:14px;margin-bottom:var(--sp-5)">
+      Restricted to programme facilitators. All sign-ins are recorded.
+    </p>
+
+    <% if (typeof lockedUntil !== 'undefined' && lockedUntil) { %>
+      <div class="alert alert-danger" role="alert" style="margin-bottom:var(--sp-4)">
+        Too many failed attempts. Try again after <%= lockedUntil %>.
+      </div>
+    <% } %>
+
+    <form method="POST" action="/admin/login" novalidate>
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+
+      <div class="form-group">
+        <label for="username" class="form-label" style="color:#E4E9E1">
+          <span>Username</span>
+        </label>
+        <input type="text" id="username" name="username" class="form-input"
+               autocomplete="username" required>
+      </div>
+
+      <div class="form-group">
+        <label for="password" class="form-label" style="color:#E4E9E1">
+          <span>Password</span>
+        </label>
+        <input type="password" id="password" name="password" class="form-input"
+               autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="btn btn-terracotta btn-block">Sign in</button>
+    </form>
+
+    <p style="font-size:13px;color:#6F7E75;margin:var(--sp-5) 0 0">
+      Taking the assessment instead? <a href="/login" style="color:var(--color-terracotta-on-dark)">Participant sign-in</a>.
+    </p>
+  </div>
+
+</div>
