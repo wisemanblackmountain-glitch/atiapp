@@ -1,0 +1,953 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   ATI ZMATF EXECUTIVE TRAINING ASSESSMENT — DESIGN SYSTEM
+   Africa Transformational Initiative
+
+   Sage-stone neutral · Deep Forest Ink · Terracotta Ochre
+   Humanist typography · Selective claymorphism · Frosted chrome (3 surfaces)
+
+   Presentation only. This file contains no logic and must not be relied on
+   by any script. Class names follow UI_HANDOFF §6.
+
+   CONTENTS
+     01  Fonts
+     02  Tokens
+     03  Reset & base
+     04  Typography
+     05  Layout
+     06  Navigation (frosted)
+     07  Buttons
+     08  Forms
+     09  Answer option cards
+     10  Cards & panels
+     11  Metrics
+     12  Tables
+     13  Badges & status
+     14  Progress navigator
+     15  Score meter
+     16  Modal & scrim
+     17  SVG safeguards
+     18  Dark mode
+     19  Responsive
+     20  Accessibility & motion
+   ══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── 01 · FONTS ────────────────────────────────────────────────────────────
+   Self-hosted to remove a render-blocking third-party round trip on variable
+   connectivity, and to let the CSP in server.js drop fonts.googleapis.com and
+   fonts.gstatic.com entirely.
+
+   Place subsetted woff2 files in public/fonts/. Until then these declarations
+   fail silently and the humanist fallback stacks in --font-* take over, so the
+   app renders correctly either way.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('/fonts/source-serif-4-600.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F;
+}
+@font-face {
+  font-family: 'Fira Sans';
+  src: url('/fonts/fira-sans-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F;
+}
+@font-face {
+  font-family: 'Fira Sans';
+  src: url('/fonts/fira-sans-650.woff2') format('woff2');
+  font-weight: 650; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-017F, U+0180-024F;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/ibm-plex-mono-600.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF;
+}
+
+
+/* ── 02 · TOKENS ─────────────────────────────────────────────────────────── */
+
+:root {
+  /* Sage-stone — neutral derived from Deep Forest Ink (hue ≈150°) */
+  --color-stone:         #E9EDE7;
+  --color-stone-surface: #F7F9F5;
+  --color-stone-well:    #DFE5DC;
+  --color-stone-border:  #C9D2C5;
+
+  /* Deep Forest Ink */
+  --color-forest:        #12221A;
+  --color-forest-light:  #1D3529;
+  --color-forest-card:   #172B21;
+  --color-forest-dark:   #0B1510;
+
+  /* Terracotta Ochre — roles split for WCAG AA compliance */
+  --color-terracotta:         #C85A32;  /* fills only: buttons, badges     */
+  --color-terracotta-text:    #AA4825;  /* body-size accent type — 5.2:1   */
+  --color-terracotta-on-dark: #E07A4F;  /* accent on forest      — 5.4:1   */
+  --color-terracotta-hover:   #B44E29;
+  --color-terracotta-tint:    #F7EDE6;
+  --color-terracotta-border:  #E3B8A6;
+
+  /* Semantic — distinct from the accent hue */
+  --color-success:  #2A6349;
+  --color-warning:  #9A6512;
+  --color-danger:   #A63A25;
+
+  /* Applied roles */
+  --bg:          var(--color-stone);
+  --surface:     var(--color-stone-surface);
+  --surface-sunk:var(--color-stone-well);
+  --border:      var(--color-stone-border);
+  --border-soft: #DAE1D7;
+  --text:        var(--color-forest);
+  --text-muted:  #4A584F;   /* 6.3:1 on canvas */
+  --text-faint:  #74827A;
+  --accent:      var(--color-terracotta-text);
+  --accent-fill: var(--color-terracotta);
+  --on-accent:   #FFFFFF;
+
+  /* Spacing — 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64. No arbitrary values. */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px;
+
+  /* Radius — raised to carry clay, stopping short of pill */
+  --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px;
+
+  /* Elevation — shadows tinted with forest ink, never black.
+     Pure black over a warm-neutral ground renders grey and dirty. */
+  --flat-sm: 0 1px 2px rgba(18, 34, 26, .06);
+  --flat-md: 0 2px 4px rgba(18, 34, 26, .06), 0 8px 16px rgba(18, 34, 26, .09);
+  --flat-lg: 0 4px 8px rgba(18, 34, 26, .09), 0 16px 32px rgba(18, 34, 26, .12);
+
+  /* Clay — controls only. Outer drop + inner top highlight + inner core.
+     Never applied to tables, reading matter, or scrolling containers. */
+  --clay-raise:
+    0 1px 2px rgba(18, 34, 26, .07),
+    0 8px 16px -6px rgba(18, 34, 26, .15),
+    inset 0 2px 3px rgba(255, 255, 255, .9),
+    inset 0 -3px 5px rgba(18, 34, 26, .07);
+  --clay-press:
+    0 1px 1px rgba(18, 34, 26, .05),
+    inset 0 3px 6px rgba(18, 34, 26, .14),
+    inset 0 -1px 2px rgba(255, 255, 255, .55);
+  --clay-accent:
+    0 2px 4px rgba(170, 72, 37, .22),
+    0 9px 16px -6px rgba(170, 72, 37, .34),
+    inset 0 2px 3px rgba(255, 255, 255, .34),
+    inset 0 -3px 5px rgba(112, 42, 18, .3);
+
+  /* Typography — humanist stacks with humanist system fallbacks */
+  --font-display: 'Source Serif 4', Charter, 'Bitstream Charter', 'Iowan Old Style',
+                  'Palatino Linotype', Palatino, Georgia, serif;
+  --font-ui:      'Fira Sans', 'Segoe UI', 'Lucida Grande', 'Trebuchet MS',
+                  -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'IBM Plex Mono', 'Cascadia Mono', 'DejaVu Sans Mono',
+                  Consolas, ui-monospace, monospace;
+
+  /* Motion — all under 200ms, GPU-friendly properties only */
+  --dur-press: 90ms;
+  --dur-fast:  120ms;
+  --dur-base:  140ms;
+  --dur-slow:  180ms;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-fill);
+  --measure: 68ch;
+}
+
+
+/* ── 03 · RESET & BASE ───────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+img, svg { vertical-align: middle; }
+img { max-width: 100%; height: auto; }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--sp-6) 0;
+}
+
+
+/* ── 04 · TYPOGRAPHY ─────────────────────────────────────────────────────── */
+
+/* Display face is reserved for 28px and above, where its optical axis works.
+   It is never used for interface text. */
+h1, h2, .display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -.012em;
+  text-wrap: balance;
+  margin: 0 0 var(--sp-3);
+}
+h1 { font-size: clamp(28px, 4vw, 42px); }
+h2 { font-size: clamp(24px, 3vw, 32px); }
+
+h3, h4 {
+  font-family: var(--font-ui);
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.35;
+  margin: 0 0 var(--sp-2);
+}
+h3 { font-size: 19px; }
+h4 { font-size: 15px; }
+
+p { margin: 0 0 var(--sp-3); max-width: var(--measure); }
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--color-terracotta-hover); }
+
+.text-muted { color: var(--text-muted); }
+.text-faint  { color: var(--text-faint); }
+
+/* Tabular numerals are mandatory anywhere digits update or align in columns.
+   Without them the countdown reflows every second. */
+.font-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+
+.label-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  display: block;
+  margin-bottom: var(--sp-2);
+}
+
+
+/* ── 05 · LAYOUT ─────────────────────────────────────────────────────────── */
+
+.page { flex: 1 0 auto; }
+
+.container {
+  width: 100%;
+  max-width: 1140px;
+  margin: 0 auto;
+  padding-inline: var(--sp-5);
+}
+.container-narrow { max-width: 720px; }
+
+.section { padding-block: var(--sp-7); }
+
+.stack        { display: flex; flex-direction: column; gap: var(--sp-4); }
+.stack-tight  { display: flex; flex-direction: column; gap: var(--sp-2); }
+.row          { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.row-end      { margin-left: auto; }
+
+/* Asymmetric split — participant and admin login */
+.split {
+  display: grid;
+  grid-template-columns: .85fr 1fr;
+  min-height: 560px;
+}
+.split-brand {
+  background: var(--color-forest);
+  color: #E6EBE4;
+  padding: var(--sp-7) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+}
+.split-brand h1, .split-brand h2 { color: #F2F5F0; }
+.split-form {
+  padding: var(--sp-7) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--bg);
+}
+
+/* Question canvas — 2 column with sticky navigator */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: var(--sp-5);
+  align-items: start;
+}
+.workspace-aside { position: sticky; top: var(--sp-7); }
+
+.site-footer {
+  flex-shrink: 0;
+  background: var(--color-forest-dark);
+  color: #8E9C93;
+  padding: var(--sp-5) 0;
+  font-size: 13px;
+}
+
+
+/* ── 06 · NAVIGATION — frosted, 1 of 3 permitted backdrop-filter surfaces ──
+   Frosted material reads only against dark or saturated grounds. Over the
+   sage-stone canvas a blurred translucent panel is perceptually identical to
+   a flat tint, so it is never used there. This bar sits on forest ink, where
+   it earns its cost, and it solves a real problem: content scrolling beneath
+   sticky chrome.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(18, 34, 26, .87);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  color: #E6EBE4;
+}
+/* Opaque fallback where backdrop-filter is unsupported */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-nav { background: #16281E; }
+}
+
+.site-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  max-width: 1140px;
+  margin: 0 auto;
+}
+.site-nav a { color: #C4CFC7; text-decoration: none; font-size: 14px; }
+.site-nav a:hover { color: #FFFFFF; }
+
+.nav-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.nav-seal {
+  width: 28px; height: 28px;
+  flex: none;
+  border-radius: var(--r-xs);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: var(--clay-accent);
+}
+
+/* Assessment countdown. Never pulses, flashes, or turns red — manufacturing
+   anxiety during a timed assessment is a design failure. It shifts to a calm
+   amber at two minutes and stops there. */
+.timer-display {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  letter-spacing: .04em;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, .15);
+  transition: background-color var(--dur-slow) var(--ease);
+}
+.timer-display.is-low {
+  background: rgba(224, 168, 79, .18);
+  border-color: rgba(224, 168, 79, .4);
+  color: #F0C68B;
+}
+
+
+/* ── 07 · BUTTONS — clay, confident and tactile ──────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font-family: var(--font-ui);
+  /* 15px/650 clears the AA large-text threshold, which white on #C85A32
+     (4.2:1) requires. Do not reduce below this. */
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--clay-raise);
+  transition:
+    box-shadow var(--dur-press) var(--ease),
+    transform  var(--dur-press) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+.btn:hover  { transform: translateY(-1px); }
+.btn:active { transform: translateY(1px); box-shadow: var(--clay-press); }
+
+.btn-terracotta {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  box-shadow: var(--clay-accent);
+}
+.btn-terracotta:hover { background: var(--color-terracotta-hover); }
+
+.btn-ghost {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.btn-dark {
+  background: var(--color-forest);
+  color: #E6EBE4;
+}
+.btn-dark:hover { background: var(--color-forest-light); }
+
+.btn-lg    { padding: var(--sp-4) var(--sp-5); font-size: 16px; }
+.btn-sm    { padding: var(--sp-2) var(--sp-3); font-size: 14px; border-radius: var(--r-sm); }
+.btn-block { width: 100%; }
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: var(--flat-sm);
+}
+
+
+/* ── 08 · FORMS — inputs read as recessed wells ──────────────────────────── */
+
+.form-group { display: flex; flex-direction: column; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+
+.form-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 14px;
+  font-weight: 650;
+}
+.form-hint { font-size: 12px; font-weight: 400; color: var(--text-faint); }
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.4;
+  box-shadow: var(--clay-press);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.form-input.font-mono { font-family: var(--font-mono); letter-spacing: .06em; }
+
+.form-input::placeholder { color: var(--text-faint); }
+
+.form-input:focus-visible,
+.form-select:focus-visible,
+.form-textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent-fill);
+  box-shadow: var(--clay-press), 0 0 0 3px rgba(200, 90, 50, .2);
+}
+
+.form-input[aria-invalid="true"] { border-color: var(--color-danger); }
+
+/* Errors state what went wrong and how to fix it. */
+.form-error {
+  font-size: 13px;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.alert {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm);
+  border-left: 2px solid var(--accent-fill);
+  background: var(--surface);
+  font-size: 14.5px;
+  color: var(--text-muted);
+  box-shadow: var(--flat-sm);
+}
+.alert-danger  { border-left-color: var(--color-danger); }
+.alert-success { border-left-color: var(--color-success); }
+
+
+/* ── 09 · ANSWER OPTION CARDS ─────────────────────────────────────────────
+   The primary interaction of the assessment. Clay carries real weight here:
+   selection is legible by depth before colour is read at all, which supports
+   low-vision and colour-blind users and satisfies state-beyond-colour.
+
+   Selected cards use tint + border + filled badge, never a saturated fill,
+   so the chosen answer stays visually distinct from the primary action.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.option-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-2);
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  cursor: pointer;
+  box-shadow: var(--clay-raise);
+  transition:
+    box-shadow       var(--dur-base) var(--ease),
+    background-color var(--dur-base) var(--ease),
+    border-color     var(--dur-base) var(--ease);
+}
+.option-btn:hover { border-color: var(--color-terracotta-border); }
+
+.option-btn.selected {
+  background: var(--color-terracotta-tint);
+  border-color: var(--color-terracotta-border);
+  box-shadow: var(--clay-press);
+}
+
+.option-letter-badge {
+  flex: none;
+  width: 28px; height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.option-btn.selected .option-letter-badge {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-color: transparent;
+  box-shadow: var(--clay-accent);
+}
+
+.option-text { flex: 1; }
+
+.option-radio-check {
+  flex: none;
+  margin-left: auto;
+  width: 20px; height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+.option-btn.selected .option-radio-check {
+  border-color: transparent;
+  background: var(--accent-fill);
+}
+.radio-inner { width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+.option-btn.selected .radio-inner { background: var(--color-terracotta-tint); }
+
+
+/* ── 10 · CARDS & PANELS — flat, they hold reading matter ────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-6);
+  box-shadow: var(--flat-md);
+}
+.card-lg    { padding: var(--sp-7); }
+.card-sunk  { background: var(--surface-sunk); box-shadow: none; }
+
+.card-dark {
+  background: var(--color-forest-card);
+  border-color: transparent;
+  color: #E4E9E1;
+}
+.card-dark h1, .card-dark h2, .card-dark h3 { color: #F2F5F0; }
+
+.card-interactive { transition: transform var(--dur-slow) var(--ease), box-shadow var(--dur-slow) var(--ease); }
+.card-interactive:hover { transform: translateY(-2px); box-shadow: var(--flat-lg); }
+
+
+/* ── 11 · METRICS ────────────────────────────────────────────────────────── */
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  box-shadow: var(--clay-raise);
+}
+.metric-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+}
+.metric-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: .03em;
+  margin-top: var(--sp-1);
+}
+
+
+/* ── 12 · TABLES — readable first, fully opaque, never clay ──────────────── */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--flat-md);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 560px;
+}
+.data-table thead th {
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-sunk);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:hover { background: var(--bg); }
+.data-table .num { text-align: right; }
+
+
+/* ── 13 · BADGES & STATUS ────────────────────────────────────────────────
+   Status is carried by a word and a shape as well as a hue, never by colour
+   alone. */
+
+.badge {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--surface-sunk);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.badge-accent  { background: var(--color-terracotta-tint); border-color: var(--color-terracotta-border); color: var(--accent); }
+.badge-success { background: rgba(42, 99, 73, .12);  border-color: rgba(42, 99, 73, .32);  color: var(--color-success); }
+.badge-warning { background: rgba(154, 101, 18, .12); border-color: rgba(154, 101, 18, .32); color: var(--color-warning); }
+
+
+/* ── 14 · PROGRESS NAVIGATOR (Q01–Q20) ───────────────────────────────────── */
+
+.progress-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--sp-1);
+}
+.progress-dot {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-decoration: none;
+  box-shadow: var(--clay-raise);
+  transition: box-shadow var(--dur-base) var(--ease);
+}
+.progress-dot.is-answered {
+  background: var(--color-terracotta-tint);
+  border-color: var(--color-terracotta-border);
+  color: var(--accent);
+  box-shadow: var(--clay-press);
+}
+.progress-dot.is-current {
+  background: var(--accent-fill);
+  border-color: transparent;
+  color: var(--on-accent);
+  box-shadow: var(--clay-accent);
+}
+
+
+/* ── 15 · SCORE METER — pressed channel, raised accent fill ──────────────── */
+
+.score-meter {
+  flex: 1;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+  box-shadow: var(--clay-press);
+}
+.score-meter-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: var(--accent-fill);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, .34),
+    inset 0 -2px 3px rgba(112, 42, 18, .3);
+}
+.score-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+.score-total { font-family: var(--font-mono); font-size: 16px; color: var(--text-muted); }
+
+
+/* ── 16 · MODAL & SCRIM — frosted, 2 of 3 permitted surfaces ─────────────── */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background: rgba(11, 21, 16, .46);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .modal-scrim { background: rgba(11, 21, 16, .7); }
+}
+
+/* Flat, not clay — it holds reading matter. */
+.modal {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-6);
+  box-shadow: 0 4px 8px rgba(11, 21, 16, .22), 0 24px 48px rgba(11, 21, 16, .34);
+  animation: modal-in var(--dur-slow) var(--ease);
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+
+/* ── 17 · SVG SAFEGUARDS ─────────────────────────────────────────────────
+   Retained from UI_HANDOFF §5 Issue 2. Inline SVG without explicit dimensions
+   expands to fill its container. Every icon class is constrained here, and any
+   newly added SVG must carry explicit width and height attributes as well. */
+
+.emblem-svg  { width: 56px; height: 56px; max-width: 56px; max-height: 56px; flex: none; }
+.emblem-icon { width: 32px; height: 32px; max-width: 32px; max-height: 32px; flex: none; }
+.timer-svg   { width: 20px; height: 20px; max-width: 20px; max-height: 20px; flex: none; }
+.btn-arrow   { width: 18px; height: 18px; max-width: 18px; max-height: 18px; flex: none; }
+svg { max-width: 100%; }
+
+
+/* ── 18 · DARK MODE — the Deep Forest ramp, not a new palette ─────────────
+   #0B1510 / #12221A / #172B21 were already in the brand. The accent lifts to
+   #E07A4F for 5.4:1 on forest. Clay inverts: the highlight drops to 7% white
+   and the core shadow deepens, since a light source from above must still read.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          var(--color-forest-dark);
+    --surface:     var(--color-forest);
+    --surface-sunk:var(--color-forest-card);
+    --border:      #263B2E;
+    --border-soft: #1C2E23;
+    --text:        #E4E9E1;
+    --text-muted:  #9CAAA1;
+    --text-faint:  #6F7E75;
+    --accent:      var(--color-terracotta-on-dark);
+    --accent-fill: var(--color-terracotta-on-dark);
+    --on-accent:   #1A0E08;
+
+    --color-success: #74CB9E;
+    --color-warning: #E0B45F;
+    --color-danger:  #F08D71;
+
+    --flat-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --flat-md: 0 2px 4px rgba(0, 0, 0, .36), 0 8px 16px rgba(0, 0, 0, .42);
+    --flat-lg: 0 4px 8px rgba(0, 0, 0, .42), 0 16px 32px rgba(0, 0, 0, .48);
+
+    --clay-raise:
+      0 1px 2px rgba(0, 0, 0, .4),
+      0 8px 16px -6px rgba(0, 0, 0, .5),
+      inset 0 2px 3px rgba(255, 255, 255, .07),
+      inset 0 -3px 5px rgba(0, 0, 0, .34);
+    --clay-press:
+      0 1px 1px rgba(0, 0, 0, .3),
+      inset 0 3px 6px rgba(0, 0, 0, .5),
+      inset 0 -1px 2px rgba(255, 255, 255, .05);
+    --clay-accent:
+      0 2px 4px rgba(0, 0, 0, .4),
+      0 9px 16px -6px rgba(0, 0, 0, .5),
+      inset 0 2px 3px rgba(255, 255, 255, .26),
+      inset 0 -3px 5px rgba(120, 48, 22, .5);
+  }
+
+  .site-nav { background: rgba(11, 21, 16, .88); }
+  .split-form { background: var(--bg); }
+  .form-input:focus-visible,
+  .form-select:focus-visible,
+  .form-textarea:focus-visible {
+    box-shadow: var(--clay-press), 0 0 0 3px rgba(224, 122, 79, .26);
+  }
+  .badge-accent { background: #203026; border-color: #4E3529; }
+  .option-btn.selected { background: #203026; border-color: #4E3529; }
+  .progress-dot.is-answered { background: #203026; border-color: #4E3529; }
+  .option-btn.selected .radio-inner { background: #203026; }
+}
+
+
+/* ── 19 · RESPONSIVE ─────────────────────────────────────────────────────── */
+
+/* Tablet — stacked layout, navigator moves above the canvas */
+@media (max-width: 1024px) {
+  .workspace { grid-template-columns: 1fr; }
+  .workspace-aside { position: static; order: -1; }
+  .progress-grid { grid-template-columns: repeat(10, 1fr); }
+}
+
+/* Mobile — single column, full-width actions, 48px touch targets */
+@media (max-width: 768px) {
+  body { font-size: 15px; }
+  .container { padding-inline: var(--sp-4); }
+  .split { grid-template-columns: 1fr; min-height: 0; }
+  .split-brand, .split-form { padding: var(--sp-5) var(--sp-4); }
+  .card { padding: var(--sp-5); }
+  .card-lg { padding: var(--sp-5); }
+  .section { padding-block: var(--sp-5); }
+  .btn { width: 100%; }
+  .row .btn { width: auto; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .progress-grid { grid-template-columns: repeat(5, 1fr); }
+  .site-nav-inner { padding: var(--sp-2) var(--sp-4); }
+  .score-value { font-size: 28px; }
+}
+
+@media print {
+  .site-nav, .modal-scrim, .btn { display: none; }
+  body { background: #fff; color: #000; }
+  .card, .table-wrap { box-shadow: none; border-color: #999; }
+}
+
+
+/* ── 20 · ACCESSIBILITY & MOTION ─────────────────────────────────────────── */
+
+/* Focus is always visible. Clay depth never substitutes for a focus ring. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-xs);
+}
+.option-btn:focus-visible,
+.btn:focus-visible {
+  box-shadow: var(--clay-raise), var(--focus-ring);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-radius: var(--r-sm);
+  z-index: 200;
+}
+.skip-link:focus { left: var(--sp-4); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows High Contrast — clay and frosted material carry no meaning there,
+   so structural borders are restored. */
+@media (forced-colors: active) {
+  .btn, .option-btn, .card, .metric, .progress-dot, .modal { border: 1px solid ButtonBorder; }
+  .option-btn.selected { border: 2px solid Highlight; }
+}

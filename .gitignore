@@ -24,6 +24,11 @@ database/*.db
 database/*.db-wal
 database/*.db-shm
 
+# ── Local QA harness ───────────────────────────────────────
+# Component gallery for style.css. Not committed: express.static
+# would serve it as a public route.
+public/qa.html
+
 # ── Logs & OS cruft ────────────────────────────────────────
 *.log
 npm-debug.log*
