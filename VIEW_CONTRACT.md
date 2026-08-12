@@ -297,14 +297,75 @@ Routes must return **401, 403 or 409** when the session or attempt is no longer
 valid — the script reloads on those so the participant lands wherever the server
 now considers correct, instead of clicking into a void.
 
-## 7. Still outstanding
+## 7. Application layer
 
-- **`src/routes/`, `src/engines/`, `src/middleware/`, `src/utils/`, `database/`** —
-  the application logic. The views are inert without it; this document is the
-  spec to build against.
+`src/` and `database/` are now built and satisfy this contract. Notes that are
+not obvious from the code:
+
+### Seeding
+
+Official content is **never committed**. Two gitignored files under
+`database/content/` are generated from the source documents:
+
+```bash
+node database/tools/build-content.js
+```
+
+That reads `pre-training-test.txt` and `participants.txt` and emits
+`assessment.json` (20 questions, 80 options, answer key) and `roster.json`
+(32 officers). Then:
+
+```bash
+node database/seed.js
+```
+
+Seeding **issues fresh 6-digit PINs from a CSPRNG** and writes them to the
+gitignored `participant-credentials.txt`. Every reseed invalidates all
+previously issued PINs — which is the mechanism for a credential reissue. Pass
+`--keep-pins` to reseed content while preserving issued PINs, and `--force` to
+discard recorded attempts.
+
+### sql.js is single-writer
+
+The database is a WASM SQLite image held **entirely in memory** and serialised
+to `database/ati-assessment.db` on write. Two processes cannot share it: the
+last to persist overwrites the other. Consequences:
+
+- Never run `seed.js` while the server is running — restart the server
+  afterwards, or it will flush its stale image back over the new data.
+- Any external tooling that reads the file must be read-only and re-read it per
+  query.
+- The app is single-instance. Session storage (`MemoryStore`) and the login
+  rate limiter are also per-process, so horizontal scaling needs all three
+  replaced together.
+
+### CSRF
+
+`csurf` is listed in `package.json` but is **not used** — it was deprecated and
+archived, and its cookie mode carries a known bypass.
+`src/middleware/validation.js` implements the synchroniser-token pattern
+against `req.session` instead. The wire contract is unchanged: `_csrf` for
+forms, `X-CSRF-Token` for AJAX.
+
+### Server-authoritative timing
+
+`src/utils/timer.js` owns expiry. Every mutating assessment route calls
+`enforceDeadline()` before writing, and an expired attempt is finalised as
+`TIMED_OUT`. `save-answer` allows a 5-second grace so an answer clicked just
+before the deadline is not lost to network latency; scoring uses the true
+deadline.
+
+## 8. Still outstanding
+
 - **Five woff2 files** in `public/fonts/` — see the comment block in
   `views/layouts/main.ejs`. Until they land, the app renders on humanist system
   fallbacks.
+- **`tests/`** — the three Jest suites named in DEVELOPER_HANDOFF §12 do not
+  exist yet. The end-to-end checks run today are external scripts, not
+  committed tests.
+- **PIN hashing.** `access_pin` is stored as issued, per the documented schema.
+  Hashing it would be sensible hardening but changes §4 of the handoff, so it
+  has not been applied unilaterally.
 
 ### Regression check worth keeping
 
