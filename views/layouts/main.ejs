@@ -84,12 +84,18 @@
 
           data-deadline is the server-issued ISO deadline. The client renders
           from it but the server remains authoritative on expiry.
+
+          data-now is the server's own clock at render time. timer.js diffs it
+          against the browser clock and applies the offset to every reading, so
+          a participant with a skewed system clock still sees the true remaining
+          time. Optional; omit and the browser clock is trusted.
         %>
         <span class="timer-display font-mono"
               id="assessment-timer"
               role="timer"
               aria-live="off"
-              <% if (typeof navDeadline !== 'undefined') { %>data-deadline="<%= navDeadline %>"<% } %>>
+              <% if (typeof navDeadline !== 'undefined') { %>data-deadline="<%= navDeadline %>"<% } %>
+              <% if (typeof navNow !== 'undefined') { %>data-now="<%= navNow %>"<% } %>>
           --:--
         </span>
         <span class="visually-hidden" id="timer-announcer" aria-live="polite"></span>

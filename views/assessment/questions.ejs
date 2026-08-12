@@ -46,7 +46,8 @@
       <div role="radiogroup"
            aria-label="Answer options for question <%= question.question_number %>"
            id="option-group"
-           data-question-id="<%= question.id %>">
+           data-question-id="<%= question.id %>"
+           data-question-number="<%= question.question_number %>">
 
         <% choices.forEach(function (option) { %>
           <% var isSelected = (typeof selectedPosition !== 'undefined' && selectedPosition === option.position); %>
@@ -106,6 +107,7 @@
         <% progress.items.forEach(function (item) { %>
           <a href="/assessment/questions/<%= item.number %>"
              class="progress-dot <%= item.number === question.question_number ? 'is-current' : (item.answered ? 'is-answered' : '') %>"
+             data-number="<%= item.number %>"
              aria-label="Question <%= item.number %><%= item.answered ? ', answered' : ', not answered' %><%= item.number === question.question_number ? ', current' : '' %>"
              <%= item.number === question.question_number ? 'aria-current="true"' : '' %>>
             <%= item.number %>

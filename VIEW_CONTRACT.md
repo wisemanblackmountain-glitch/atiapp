@@ -40,7 +40,8 @@ Optional on any render:
 | `nav` | String | `'none'` \| `'assessment'` \| `'admin'`. Omit for the default bar. |
 | `navTitle` | String | Text beside the seal. |
 | `navCounter` | String | Assessment nav only, e.g. `'Q 07 / 20'`. |
-| `navDeadline` | String | ISO timestamp. Becomes `data-deadline` on the timer. |
+| `navDeadline` | String | ISO timestamp of `deadline_at`. Becomes `data-deadline` on the timer. |
+| `navNow` | String | ISO timestamp of the **server's** clock at render. Becomes `data-now`. `timer.js` diffs it against the browser clock and corrects every reading, so a skewed client clock no longer misreports remaining time. Optional, but supply it — both values must be in server time. |
 | `scripts` | Array | Paths appended as deferred `<script>`. Nothing loads globally. |
 
 ---
@@ -260,20 +261,50 @@ Not in DEVELOPER_HANDOFF §14, defined here:
 
 ---
 
-## 6. Still outstanding
+## 6. Client scripts
 
-Two client scripts are referenced but not yet written:
+Both are written and browser-verified. They are display and transport only —
+neither holds scoring logic, and neither ever sees an option id.
 
-- **`public/js/timer.js`** — reads `data-deadline` from `#assessment-timer`,
-  renders the countdown, adds `.is-low` at two minutes, and triggers
-  auto-submission at zero. The server stays authoritative on expiry; the client
-  is display only.
-- **`public/js/assessment.js`** — click handling on `.option-btn`, POSTs
-  `{ questionId, selectedPosition }` to `/assessment/save-answer` with the
-  `X-CSRF-Token` header, updates `aria-checked` and `#save-status`.
+### `public/js/timer.js`
 
-Font files are also outstanding — see the comment block in
-`views/layouts/main.ejs`.
+Reads `data-deadline` and `data-now` from `#assessment-timer`, renders the
+countdown, adds `.is-low` at 120 seconds, announces milestones through
+`#timer-announcer`, and auto-submits at zero by posting a real form to
+`/assessment/submit` with `_csrf` and `autoSubmit=1`.
+
+Recomputes from the wall clock every tick and on `visibilitychange`, so a
+throttled or backgrounded tab self-corrects rather than drifting.
+
+> **The server must still re-check `deadline_at` on submit and on every
+> save-answer.** This clock is display only. A participant with JavaScript
+> disabled, a paused tab, or a manipulated system clock changes what is shown
+> here and nothing else.
+
+### `public/js/assessment.js`
+
+Click and arrow-key handling on `.option-btn`, POSTs
+`{ questionId, selectedPosition }` to `/assessment/save-answer` with the
+`X-CSRF-Token` header, maintains `aria-checked` and roving tabindex per the
+WAI-ARIA radiogroup pattern, and mirrors answered state into the navigator.
+
+Selection paints optimistically, then **rolls back to the last server-confirmed
+answer if the save fails**, with an actionable message. In-flight requests are
+aborted when a newer choice supersedes them, so a slow response can never
+overwrite a later answer.
+
+Routes must return **401, 403 or 409** when the session or attempt is no longer
+valid — the script reloads on those so the participant lands wherever the server
+now considers correct, instead of clicking into a void.
+
+## 7. Still outstanding
+
+- **`src/routes/`, `src/engines/`, `src/middleware/`, `src/utils/`, `database/`** —
+  the application logic. The views are inert without it; this document is the
+  spec to build against.
+- **Five woff2 files** in `public/fonts/` — see the comment block in
+  `views/layouts/main.ejs`. Until they land, the app renders on humanist system
+  fallbacks.
 
 ### Regression check worth keeping
 
