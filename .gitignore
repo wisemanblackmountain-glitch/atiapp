@@ -1,0 +1,31 @@
+# ── Dependencies ───────────────────────────────────────────
+node_modules/
+
+# ── Secrets & environment ──────────────────────────────────
+# Never commit real environment files. Commit .env.example only.
+.env
+.env.*
+!.env.example
+
+# ── Participant credentials & personal data ────────────────
+# Contains named officers and access PINs. Must never be tracked.
+participant-credentials.txt
+participants.txt
+
+# ── Official source documents ──────────────────────────────
+# Master question paper contains the answer key.
+# Annex contains named participants and facilitators.
+*.doc
+*.docx
+pre-training-test.txt
+
+# ── Database ───────────────────────────────────────────────
+database/*.db
+database/*.db-wal
+database/*.db-shm
+
+# ── Logs & OS cruft ────────────────────────────────────────
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
