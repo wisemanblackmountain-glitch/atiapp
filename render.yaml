@@ -1,0 +1,64 @@
+# ══════════════════════════════════════════════════════════════════════════
+# Render blueprint — ATI ZMATF Assessment System
+#
+# Deploy: Render dashboard → New → Blueprint → point at this repository.
+#
+# ── Why the database is not defined here ────────────────────────────────────
+# Render's free PostgreSQL instances are deleted 30 days after creation, which
+# is unusable for a system that must hold official assessment records. The
+# database is Neon (external, free tier, no expiry) and reaches this service
+# through DATABASE_URL.
+#
+# ── Free-tier instance hours ────────────────────────────────────────────────
+# The free plan grants 750 instance-hours per month. Holding one service awake
+# continuously costs ~730, so this service fits — but only just, and only if it
+# is the sole free service in the account. A second always-on free service will
+# exhaust the allowance and both will be suspended.
+# ══════════════════════════════════════════════════════════════════════════
+
+services:
+  - type: web
+    name: ati-zmatf-assessment
+    runtime: node
+    plan: free
+    region: frankfurt          # closest available region to Zanzibar
+    branch: main
+
+    buildCommand: npm ci --omit=dev
+    # Migrations run on every boot. schema.sql is idempotent, so this is safe
+    # to repeat and means a fresh database needs no manual step.
+    startCommand: npm run migrate && npm start
+
+    # Render polls this. It also gives the external keep-alive something to hit
+    # that does not create a session — see DEPLOYMENT.md.
+    healthCheckPath: /healthz
+
+    autoDeploy: false          # deploys are deliberate, not on every push
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Neon pooled connection string. Set in the dashboard, never committed.
+      - key: DATABASE_URL
+        sync: false
+
+      # Generated once by Render and held stable. Rotating it signs everyone
+      # out, which is the intended effect after any credential exposure.
+      - key: SESSION_SECRET
+        generateValue: true
+
+      # Facilitator account. Consumed by database/seed.js, which is run from an
+      # operator machine — see DEPLOYMENT.md — not by this service.
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      - key: ASSESSMENT_DURATION
+        value: "10"
+
+      # Small pool: Neon's free plan caps concurrent connections and this is a
+      # single small instance serving at most 32 officers.
+      - key: PG_POOL_MAX
+        value: "5"

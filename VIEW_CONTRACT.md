@@ -325,19 +325,42 @@ previously issued PINs — which is the mechanism for a credential reissue. Pass
 `--keep-pins` to reseed content while preserving issued PINs, and `--force` to
 discard recorded attempts.
 
-### sql.js is single-writer
+Production seeding runs from an **operator machine**, not the server: the
+content files are gitignored, so the answer key never needs to exist on
+deployed infrastructure. Point `DATABASE_URL` at Neon and run the same command.
+See DEPLOYMENT.md §3.
 
-The database is a WASM SQLite image held **entirely in memory** and serialised
-to `database/ati-assessment.db` on write. Two processes cannot share it: the
-last to persist overwrites the other. Consequences:
+### PostgreSQL, not a file
 
-- Never run `seed.js` while the server is running — restart the server
-  afterwards, or it will flush its stale image back over the new data.
-- Any external tooling that reads the file must be read-only and re-read it per
-  query.
-- The app is single-instance. Session storage (`MemoryStore`) and the login
-  rate limiter are also per-process, so horizontal scaling needs all three
-  replaced together.
+State lives in Postgres — Neon in production, a container locally
+(`npm run db:up`). Render's free tier has no persistent disk, so a SQLite file
+could not survive a deploy or spin-down.
+
+Integrity is enforced by the database rather than by convention:
+
+| Rule | Mechanism |
+|---|---|
+| One attempt per officer | primary key on `assessment_attempts` |
+| Exactly one correct option per question | partial unique index `uq_options_one_correct` |
+| Deadline follows the start | `CHECK deadline_after_start` |
+| A finished attempt carries a score | `CHECK finished_has_score` |
+| Four distinct options per display mapping | `CHECK distinct_display_options` |
+| Percentage within 0–100 | `CHECK` on the column |
+
+`database/schema.sql` is idempotent and applied by `npm run migrate`, which
+Render runs on every boot.
+
+**Still single-instance.** The login rate limiter keeps counters in process
+memory, so two instances would each hold their own and halve the effective
+lockout. Sessions are already in Postgres; the limiter is what must move before
+scaling out.
+
+### Access PINs are hashed
+
+`participants.pin_hash` is bcrypt. The plaintext exists only in the gitignored
+`participant-credentials.txt` written at seed time, for distribution. Nothing
+can recover a PIN from the database, which is why `--keep-pins` preserves
+stored hashes rather than reissuing.
 
 ### CSRF
 
@@ -360,12 +383,11 @@ deadline.
 - **Five woff2 files** in `public/fonts/` — see the comment block in
   `views/layouts/main.ejs`. Until they land, the app renders on humanist system
   fallbacks.
-- **`tests/`** — the three Jest suites named in DEVELOPER_HANDOFF §12 do not
-  exist yet. The end-to-end checks run today are external scripts, not
-  committed tests.
-- **PIN hashing.** `access_pin` is stored as issued, per the documented schema.
-  Hashing it would be sensible hardening but changes §4 of the handoff, so it
-  has not been applied unilaterally.
+- **A committed integration suite.** `npm test` covers the engines and the
+  security middleware as pure units (98 tests). The end-to-end and admin checks
+  that exercise the live HTTP stack are still external scripts, not committed
+  tests, because they need a running server and a seeded database.
+- **Rate limiter state** is per-process — see §7.
 
 ### Regression check worth keeping
 
