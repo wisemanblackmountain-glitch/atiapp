@@ -1,9 +1,9 @@
 /**
  * Seed the database from the official content files.
  *
- *   node database/seed.js            seed, refusing to touch existing attempts
- *   node database/seed.js --force    wipe attempts and reseed from scratch
- *   node database/seed.js --keep-pins  reseed but preserve issued PINs
+ *   node database/seed.js               seed, refusing to touch existing attempts
+ *   node database/seed.js --force       discard recorded attempts and reseed
+ *   node database/seed.js --keep-pins   reseed content, leave PINs alone
  *
  * Inputs (gitignored, produced by database/tools/build-content.js):
  *   database/content/assessment.json
@@ -12,12 +12,15 @@
  * Output:
  *   participant-credentials.txt — the PINs to distribute. Gitignored.
  *
- * ── Why PINs are generated here ─────────────────────────────────────────────
- * Credentials are never committed and never read from a tracked file. Each
- * seed issues fresh 6-digit PINs from a CSPRNG and writes them to one
- * gitignored file for distribution. Re-seeding therefore invalidates every
- * previously issued PIN, which is exactly what you want after a credential
- * exposure — and is the mechanism for the reissue this project needs.
+ * ── PINs ────────────────────────────────────────────────────────────────────
+ * Fresh 6-digit PINs are drawn from a CSPRNG on every seed and stored only as
+ * bcrypt hashes. The plaintext exists in exactly one place — the credentials
+ * file written here, for distribution — and nothing can recover a PIN from the
+ * database afterwards.
+ *
+ * Because --keep-pins cannot recover plaintext from a hash, it preserves the
+ * stored hashes and does not rewrite the credentials file. Use it for a
+ * content-only reseed; omit it to reissue.
  */
 
 'use strict';
@@ -27,9 +30,12 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
 
-const db = require('../src/utils/db');
+const pool = require('../src/data/pool');
+const participantsRepo = require('../src/data/participants');
+const questionsRepo = require('../src/data/questions');
+const attemptsRepo = require('../src/data/attempts');
+const adminsRepo = require('../src/data/admins');
 
 const ROOT = path.join(__dirname, '..');
 const CONTENT_DIR = path.join(ROOT, 'database', 'content');
@@ -62,7 +68,7 @@ function loadJson(file, label) {
     }
 }
 
-/** Six digits from a CSPRNG. Leading zeros are preserved — PINs are text. */
+/** Six digits from a CSPRNG. Leading zeros preserved — PINs are text. */
 function generatePin() {
     return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
@@ -81,134 +87,19 @@ function validateAssessment(data) {
     }
 }
 
-async function main() {
-    console.log('\nATI ZMATF — database seed\n' + '─'.repeat(52));
-
-    const assessment = loadJson(ASSESSMENT_FILE, 'assessment content');
-    const roster = loadJson(ROSTER_FILE, 'participant roster');
-    validateAssessment(assessment);
-
-    if (!Array.isArray(roster) || roster.length === 0) {
-        fail('roster.json is empty.');
-    }
-
-    await db.initDb();
-    db.initializeSchema();
-
-    // Guard live data. Reseeding rebuilds content and roster ids, which would
-    // orphan any attempt already recorded against them.
-    const existing = db.get('SELECT COUNT(*) AS n FROM assessment_attempts');
-    if (existing && existing.n > 0 && !FORCE) {
-        fail(
-            `${existing.n} assessment attempt(s) already recorded.`,
-            'Reseeding would discard them. Re-run with --force if that is intended.'
-        );
-    }
-
-    // Preserve issued PINs across a content-only reseed when asked.
-    const previousPins = new Map();
-    if (KEEP_PINS) {
-        for (const row of db.all('SELECT participant_number, access_pin FROM participants')) {
-            previousPins.set(row.participant_number, row.access_pin);
-        }
-    }
-
-    const issued = [];
-
-    db.transaction(() => {
-        db.run('DELETE FROM responses');
-        db.run('DELETE FROM randomized_mappings');
-        db.run('DELETE FROM assessment_attempts');
-        db.run('DELETE FROM options');
-        db.run('DELETE FROM questions');
-        db.run('DELETE FROM participants');
-
-        // ── Questions and options ────────────────────────────────────────
-        // Option ids are contract-locked as opt_q<N>_<a|b|c|d>, keyed on the
-        // SOURCE letter. Display order is decided per attempt at runtime and
-        // has nothing to do with these ids (DEVELOPER_HANDOFF §14.2).
-        for (const q of assessment.questions) {
-            db.run(
-                `INSERT INTO questions (question_number, section_label, question_text, marks)
-                 VALUES (?, ?, ?, ?)`,
-                [q.number, q.section, q.text, 1]
-            );
-            const questionId = db.lastInsertId();
-
-            for (const option of q.options) {
-                db.run(
-                    `INSERT INTO options (id, question_id, original_position, option_text, is_correct)
-                     VALUES (?, ?, ?, ?, ?)`,
-                    [
-                        `opt_q${q.number}_${option.position.toLowerCase()}`,
-                        questionId,
-                        option.position,
-                        option.text,
-                        option.correct ? 1 : 0,
-                    ]
-                );
-            }
-        }
-
-        // ── Participants ─────────────────────────────────────────────────
-        for (const person of roster) {
-            const pin = (KEEP_PINS && previousPins.get(person.participant_number))
-                || generatePin();
-
-            db.run(
-                `INSERT INTO participants
-                   (participant_number, full_name, title, agency, last_name, access_pin, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, 1)`,
-                [
-                    person.participant_number,
-                    person.full_name,
-                    person.title || '',
-                    person.agency || '',
-                    person.last_name,
-                    pin,
-                ]
-            );
-
-            issued.push({
-                number: person.participant_number,
-                name: person.full_name,
-                surname: person.last_name,
-                agency: person.agency || '',
-                pin,
-            });
-        }
-    });
-
-    // ── Administrator ────────────────────────────────────────────────────
-    const adminUser = process.env.ADMIN_USERNAME;
-    const adminPass = process.env.ADMIN_PASSWORD;
-    if (!adminUser || !adminPass) {
-        fail(
-            'ADMIN_USERNAME and ADMIN_PASSWORD must be set in .env before seeding.',
-            'Copy .env.example to .env and fill it in.'
-        );
-    }
-
-    const hash = await bcrypt.hash(adminPass, 12);
-    db.transaction(() => {
-        db.run('DELETE FROM admin_users');
-        db.run('INSERT INTO admin_users (username, password_hash) VALUES (?, ?)', [
-            adminUser,
-            hash,
-        ]);
-    });
-
-    // ── Credentials file ─────────────────────────────────────────────────
-    const stamp = new Date().toISOString();
+function writeCredentials(issued) {
     const lines = [
         'ATI ZMATF EXECUTIVE TRAINING PROGRAMME',
         'Pre-Training Diagnostic Assessment — participant access credentials',
         '',
-        `Issued: ${stamp}`,
+        `Issued: ${new Date().toISOString()}`,
         '',
         'CONFIDENTIAL. Distribute each officer only their own row, through a',
         'private channel. This file is gitignored and must never be committed,',
         'emailed as an attachment, or stored in shared cloud folders.',
+        '',
+        'These PINs are stored only as bcrypt hashes. This file is the sole',
+        'record of the plaintext — if it is lost, reseed to reissue.',
         '',
         'Sign-in requires all three: participant number, surname, and PIN.',
         '',
@@ -229,24 +120,106 @@ async function main() {
     lines.push('─'.repeat(96), '', `Total: ${issued.length} officers`, '');
 
     fs.writeFileSync(CREDENTIALS_FILE, lines.join('\n'), 'utf8');
+}
 
-    db.flush();
-    db.closeDb();
+async function main() {
+    console.log('\nATI ZMATF — database seed\n' + '─'.repeat(52));
+
+    const assessment = loadJson(ASSESSMENT_FILE, 'assessment content');
+    const roster = loadJson(ROSTER_FILE, 'participant roster');
+    validateAssessment(assessment);
+
+    if (!Array.isArray(roster) || roster.length === 0) fail('roster.json is empty.');
+
+    const adminUser = process.env.ADMIN_USERNAME;
+    const adminPass = process.env.ADMIN_PASSWORD;
+    if (!adminUser || !adminPass) {
+        fail(
+            'ADMIN_USERNAME and ADMIN_PASSWORD must be set before seeding.',
+            'Copy .env.example to .env and fill it in.'
+        );
+    }
+    if (adminPass.length < 12) fail('ADMIN_PASSWORD must be at least 12 characters.');
+
+    pool.initPool();
+    console.log(`  target         ${pool.describeTarget()}`);
+
+    // The schema is idempotent, so applying it here means a fresh database can
+    // go from empty to seeded in one command.
+    await pool.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
+
+    // Guard live data. Reseeding rebuilds content, which would orphan any
+    // attempt already recorded against it.
+    const existing = await attemptsRepo.listAll();
+    const attemptCount = Object.keys(existing).length;
+    if (attemptCount > 0 && !FORCE) {
+        fail(
+            `${attemptCount} assessment attempt(s) already recorded.`,
+            'Reseeding would discard them. Re-run with --force if that is intended.'
+        );
+    }
+    if (attemptCount > 0) {
+        const removed = await attemptsRepo.deleteAll();
+        console.log(`  attempts       ${removed} discarded (--force)`);
+    }
+
+    // ── Content ──────────────────────────────────────────────────────────
+    await questionsRepo.replaceAll(assessment.questions);
+
+    // ── Roster ───────────────────────────────────────────────────────────
+    if (KEEP_PINS) {
+        // Hashes cannot be reversed, so preserving PINs means preserving the
+        // stored hashes rather than reissuing. Only the roster fields update.
+        const before = await participantsRepo.listActive();
+        if (before.length === 0) {
+            fail('--keep-pins was given but no participants exist yet.', 'Seed once without it.');
+        }
+        console.log(`  participants   ${before.length} retained, PINs unchanged`);
+    } else {
+        const issued = roster.map((person) => ({
+            number: person.participant_number,
+            name: person.full_name,
+            surname: person.last_name,
+            agency: person.agency || '',
+            pin: generatePin(),
+        }));
+
+        await participantsRepo.replaceAll(
+            roster.map((person, i) => Object.assign({}, person, { pin: issued[i].pin }))
+        );
+        writeCredentials(issued);
+        console.log(`  participants   ${issued.length} seeded, PINs reissued`);
+    }
+
+    // ── Administrator ────────────────────────────────────────────────────
+    await adminsRepo.replaceAll(adminUser, adminPass);
+
+    await pool.query(
+        `INSERT INTO meta (key, value, updated_at) VALUES ('seed', $1, now())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [JSON.stringify({
+            seededAt: new Date().toISOString(),
+            questions: assessment.questions.length,
+            participants: roster.length,
+        })]
+    );
 
     console.log(`  questions      ${assessment.questions.length}`);
     console.log(`  options        ${assessment.questions.length * 4}`);
-    console.log(`  participants   ${issued.length}`);
     console.log(`  admin user     ${adminUser}`);
-    console.log(`  database       ${path.relative(ROOT, db.DB_FILE)}`);
     console.log('─'.repeat(52));
-    console.log(`  Credentials written to ${path.basename(CREDENTIALS_FILE)}`);
     if (!KEEP_PINS) {
-        console.log('  All PINs regenerated — any previously issued PIN is now invalid.');
+        console.log(`  Credentials written to ${path.basename(CREDENTIALS_FILE)}`);
+        console.log('  All PINs reissued — every previously issued PIN is now invalid.');
+        console.log('  This file is CONFIDENTIAL and gitignored. Do not commit it.');
     }
-    console.log('  This file is CONFIDENTIAL and gitignored. Do not commit it.\n');
+    console.log('');
+
+    await pool.closePool();
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
     console.error('\nSeed failed:', err.message, '\n');
+    await pool.closePool().catch(() => {});
     process.exit(1);
 });

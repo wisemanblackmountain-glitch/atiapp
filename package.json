@@ -6,9 +6,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "migrate": "node database/migrate.js",
+    "build:content": "node database/tools/build-content.js",
     "seed": "node database/seed.js",
     "test": "jest --verbose",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "db:up": "docker run -d --name ati-postgres -e POSTGRES_PASSWORD=ati_dev_local -e POSTGRES_DB=ati_zmatf -p 5433:5432 postgres:17-alpine",
+    "db:down": "docker rm -f ati-postgres"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "keywords": [
     "ati",
@@ -20,16 +27,13 @@
   "license": "PRIVATE",
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "csurf": "^1.11.0",
     "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
     "express": "^4.21.2",
     "express-ejs-layouts": "^2.5.1",
     "express-session": "^1.18.1",
     "helmet": "^8.0.0",
-    "memorystore": "^1.6.7",
-    "sql.js": "^1.12.0",
-    "uuid": "^11.1.0"
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "jest": "^29.7.0"
