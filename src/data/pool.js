@@ -95,6 +95,17 @@ async function queryOne(text, params = []) {
 }
 
 /**
+ * Run a statement and return the full pg result.
+ *
+ * For UPDATE and DELETE, where rowCount is the answer: "did that officer
+ * actually exist?" is not something a caller should have to infer from an empty
+ * rows array.
+ */
+async function execute(text, params = []) {
+    return getPool().query(text, params);
+}
+
+/**
  * Run `fn` inside a transaction on a dedicated client.
  *
  * Starting an attempt writes the attempt plus 20 mapping rows; a partial write
@@ -140,6 +151,7 @@ module.exports = {
     getPool,
     query,
     queryOne,
+    execute,
     transaction,
     ping,
     describeTarget,

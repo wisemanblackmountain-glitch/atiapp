@@ -87,6 +87,29 @@ function hashPin(pin) {
 }
 
 /**
+ * Replace one officer's PIN, leaving everyone else alone.
+ *
+ * The seeder reissues all 32 at once, which is right at setup and wrong on the
+ * day: an officer who loses their slip would otherwise invalidate the 31 slips
+ * already handed out.
+ *
+ * Accepts a transaction client so the change and its audit row commit together.
+ * Returns false if no such officer exists, rather than silently succeeding.
+ */
+async function setPin(participantNumber, pin, client = null) {
+    const hash = await hashPin(pin);
+    const sql = `UPDATE participants SET pin_hash = $2 WHERE participant_number = $1`;
+    const params = [participantNumber, hash];
+
+    if (client) {
+        const res = await client.query(sql, params);
+        return res.rowCount > 0;
+    }
+    const res = await db.execute(sql, params);
+    return res.rowCount > 0;
+}
+
+/**
  * Replace the whole roster. Seeding only.
  *
  * Runs in one transaction: a half-written roster would let some officers sign
@@ -122,5 +145,6 @@ module.exports = {
     count,
     verifyCredentials,
     hashPin,
+    setPin,
     replaceAll,
 };

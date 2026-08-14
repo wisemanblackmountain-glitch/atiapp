@@ -1,0 +1,76 @@
+<%#
+  NEW PIN ISSUED — shown once
+
+  Route:  POST /admin/participants/:participantNumber/reissue-pin
+  Layout: nav: 'admin'
+
+  Locals
+    title        String
+    participant  Object  { participant_number, full_name, title, agency }
+    pin          String  the new 6-digit PIN, in plaintext
+
+  ── This is the only screen in the application that displays a PIN ──────────
+  The database holds a bcrypt hash and nothing can reverse it, so this render is
+  the sole opportunity to read the value. It is rendered directly rather than
+  redirected to, because a redirect would mean carrying the PIN through the
+  session — and the session store is the database, which would write it to disk
+  in plaintext.
+
+  Reloading this page will not bring it back. That is stated plainly below so a
+  facilitator writes it down before navigating away.
+%>
+
+<div class="container container-narrow section">
+
+  <div class="label-meta">PIN reissued</div>
+  <h1 style="font-size:clamp(24px,3vw,32px)">New PIN for <%= participant.full_name %></h1>
+
+  <div class="alert alert-danger" role="alert" style="margin-bottom:var(--sp-5)">
+    <strong>This PIN is shown once.</strong> It cannot be recovered from this
+    screen or anywhere else — reloading will not bring it back. Write it down or
+    print this page before you navigate away.
+  </div>
+
+  <div class="card card-lg">
+    <table class="data-table" style="min-width:0">
+      <tbody>
+        <tr>
+          <td style="width:44%;color:var(--text-muted)">Participant number</td>
+          <td class="font-mono" style="font-size:20px;font-weight:600">
+            <%= participant.participant_number %>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text-muted)">Surname</td>
+          <td class="font-mono" style="font-size:17px">
+            <%= String(participant.last_name || participant.full_name.split(' ').pop()).toUpperCase() %>
+          </td>
+        </tr>
+        <tr style="border-bottom:0">
+          <td style="color:var(--text-muted)">New access PIN</td>
+          <td>
+            <span class="font-mono"
+                  style="font-size:34px;font-weight:600;letter-spacing:.16em;color:var(--accent)">
+              <%= pin %>
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="text-muted" style="font-size:14px;margin:var(--sp-5) 0 0">
+      <%= participant.title %><% if (participant.agency) { %> &middot; <%= participant.agency %><% } %>
+    </p>
+  </div>
+
+  <div class="alert" style="margin-top:var(--sp-4)">
+    The officer's previous PIN no longer works. Nobody else is affected — the
+    other officers keep the PINs already issued to them.
+  </div>
+
+  <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+    <button type="button" class="btn btn-terracotta" onclick="window.print()">Print this page</button>
+    <a href="/admin/participants" class="btn btn-ghost">Back to roster</a>
+  </div>
+
+</div>

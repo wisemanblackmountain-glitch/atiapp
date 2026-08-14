@@ -224,6 +224,41 @@ server-side so results stay linkable. Links to `/admin/results/:participantNumbe
 
 `attempt` additionally needs `started_at`.
 
+### `admin/pin-reissued.ejs` → `POST /admin/participants/:participantNumber/reissue-pin`
+
+```js
+{ title, nav: 'admin', participant, pin }   // pin is plaintext, shown ONCE
+```
+
+The only screen in the application that displays a PIN. Rendered directly
+rather than redirected to: a redirect would carry the PIN through the session,
+and the session store is the database, so it would be written to disk in
+plaintext. Reloading does not bring it back, and the view says so.
+
+The seeder reissues all 32 PINs; this reissues one. On the day, an officer who
+mislays their slip must not invalidate the 31 already distributed.
+
+### `admin/audit.ejs` → `GET /admin/audit`
+
+```js
+{ title, nav: 'admin',
+  entries: [ { id, occurred_at, admin_username, action,
+               participant_number, detail, ip_address } ] }
+```
+
+`action` is `RETAKE_ALLOWED` or `PIN_REISSUED`. Append-only — there is no route
+that edits or deletes a row, and `admin_audit` carries **no foreign keys** so an
+entry outlives whatever it describes. PINs are never recorded.
+
+### `POST /admin/participants/:participantNumber/retake`
+
+Clears an officer's attempt so they can sit again, cascading to their mappings
+and responses so the retake gets a fresh randomisation. Redirects to
+`/admin/participants?retake=<n>`, which the roster turns into a confirmation.
+
+Both destructive routes write their audit row **inside the same transaction** as
+the change, so a rolled-back action cannot leave a record claiming it happened.
+
 ### `admin/analytics.ejs` → `GET /admin/analytics`
 
 ```js

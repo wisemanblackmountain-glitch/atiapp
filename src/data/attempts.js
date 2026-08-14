@@ -267,6 +267,29 @@ async function getAuditRows(participantNumber) {
     );
 }
 
+/**
+ * Clear one officer's attempt so they can sit again.
+ *
+ * Cascades to their mappings and responses, so the retake gets a fresh option
+ * randomisation rather than the layout they already saw.
+ *
+ * Returns the discarded attempt — the caller needs it for the audit record,
+ * because once this commits there is nothing left to describe. Returns null if
+ * there was no attempt to clear.
+ */
+async function deleteForParticipant(participantNumber, client = null) {
+    const sql = `DELETE FROM assessment_attempts
+                  WHERE participant_number = $1
+              RETURNING *`;
+    const params = [participantNumber];
+
+    const rows = client
+        ? (await client.query(sql, params)).rows
+        : await db.query(sql, params);
+
+    return rows.length ? toAttempt(rows[0]) : null;
+}
+
 /** Delete every attempt. Cascades to mappings and responses. */
 async function deleteAll() {
     const rows = await db.query(
@@ -288,5 +311,6 @@ module.exports = {
     getScoreDistribution,
     getItemDifficulty,
     getAuditRows,
+    deleteForParticipant,
     deleteAll,
 };

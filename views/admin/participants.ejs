@@ -109,13 +109,38 @@
                       : p.score + ' / ' + p.total_marks %>
               </td>
               <td><%= p.knowledge_level || '—' %></td>
+              <%#
+                Actions. Both destructive ones are POSTs carrying the CSRF
+                token — never links, since a GET that changes state can be
+                triggered by a prefetch or a stray click.
+              %>
               <td>
-                <% if (p.status === 'COMPLETED' || p.status === 'TIMED_OUT') { %>
-                  <a href="/admin/results/<%= p.participant_number %>"
-                     aria-label="View report for participant <%= p.participant_number %>">Report</a>
-                <% } else { %>
-                  <span class="text-faint">—</span>
-                <% } %>
+                <div class="row" style="gap:var(--sp-2);flex-wrap:nowrap;align-items:center">
+                  <% if (p.status === 'COMPLETED' || p.status === 'TIMED_OUT') { %>
+                    <a href="/admin/results/<%= p.participant_number %>"
+                       aria-label="View report for participant <%= p.participant_number %>">Report</a>
+                  <% } %>
+
+                  <% if (p.status !== 'NOT_STARTED') { %>
+                    <form method="POST"
+                          action="/admin/participants/<%= p.participant_number %>/retake"
+                          style="display:inline"
+                          onsubmit="return confirm('Allow <%= p.full_name.replace(/'/g, "\\'") %> to sit the assessment again?\n\nThis permanently discards their current attempt<%= p.score !== null && typeof p.score !== 'undefined' ? ' and its score of ' + p.score + '/' + p.total_marks : '' %>. It cannot be undone.');">
+                      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                      <button type="submit" class="btn btn-sm btn-ghost"
+                              aria-label="Allow participant <%= p.participant_number %> to retake">Retake</button>
+                    </form>
+                  <% } %>
+
+                  <form method="POST"
+                        action="/admin/participants/<%= p.participant_number %>/reissue-pin"
+                        style="display:inline"
+                        onsubmit="return confirm('Issue a new PIN for <%= p.full_name.replace(/'/g, "\\'") %>?\n\nTheir current PIN stops working immediately. Nobody else is affected.');">
+                    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                    <button type="submit" class="btn btn-sm btn-ghost"
+                            aria-label="Issue a new PIN for participant <%= p.participant_number %>">New PIN</button>
+                  </form>
+                </div>
               </td>
             </tr>
           <% }); %>

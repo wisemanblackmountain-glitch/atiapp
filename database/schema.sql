@@ -156,6 +156,32 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
 
+-- ── Administrator audit ──────────────────────────────────────────────────
+-- Records destructive facilitator actions: clearing an attempt so an officer
+-- can retake, and reissuing a PIN.
+--
+-- Deliberately carries NO foreign keys. An audit row must outlive whatever it
+-- describes — if a participant row were ever removed, a cascade would erase the
+-- evidence of what was done to them, which is precisely backwards for an audit
+-- trail on an official record.
+--
+-- Append-only by convention: the application never updates or deletes here.
+CREATE TABLE IF NOT EXISTS admin_audit (
+    id                 BIGSERIAL   PRIMARY KEY,
+    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    admin_username     TEXT        NOT NULL,
+    action             TEXT        NOT NULL
+                       CHECK (action IN ('RETAKE_ALLOWED', 'PIN_REISSUED')),
+    participant_number SMALLINT,
+    -- What was discarded, so "who let officer 12 retake, and what score did
+    -- they lose?" is answerable months later.
+    detail             JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    ip_address         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_occurred ON admin_audit (occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_participant ON admin_audit (participant_number);
+
 -- ── Metadata ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS meta (
     key        TEXT PRIMARY KEY,

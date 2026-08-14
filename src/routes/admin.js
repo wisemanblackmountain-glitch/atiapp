@@ -14,18 +14,33 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('crypto');
 
+const db = require('../data/pool');
 const participantsRepo = require('../data/participants');
 const attemptsRepo = require('../data/attempts');
+const auditRepo = require('../data/audit');
 const scoring = require('../engines/scoring');
 const asyncHandler = require('../utils/asyncHandler');
 const { requireAdmin } = require('../middleware/auth');
+const { verifyCsrf } = require('../middleware/validation');
 
 const router = express.Router();
 
 router.use(requireAdmin);
 
 const STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'TIMED_OUT'];
+
+/** Six digits from a CSPRNG, matching the seeder. */
+function generatePin() {
+    return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+/** Participant number from the URL, or null if it is not a plausible one. */
+function participantNumberParam(req) {
+    const n = Number(req.params.participantNumber);
+    return Number.isInteger(n) && n >= 1 && n <= 999 ? n : null;
+}
 
 function isFinished(status) {
     return status === 'COMPLETED' || status === 'TIMED_OUT';
@@ -96,6 +111,126 @@ router.get('/participants', asyncHandler(async (req, res) => {
         participants,
         filters: { q, status },
         total: all.length,
+        // Set after a retake is granted, so the roster confirms what happened.
+        // Carried in the querystring rather than a session flash — it is not
+        // sensitive, and it keeps the redirect stateless.
+        success: req.query.retake
+            ? `Officer ${String(req.query.retake).padStart(2, '0')} may now sit the assessment again.`
+            : null,
+    });
+}));
+
+// ── Destructive actions ──────────────────────────────────────────────────
+// Both write their audit row inside the same transaction as the change, so a
+// rolled-back action cannot leave a record claiming it happened.
+
+/**
+ * Clear an officer's attempt so they can sit again.
+ *
+ * For the genuine cases: a browser crashed mid-assessment, the wrong person
+ * signed in, a session was lost. Cascades to mappings and responses, so the
+ * retake gets a fresh option randomisation rather than the layout already seen.
+ */
+router.post('/participants/:participantNumber/retake', verifyCsrf, asyncHandler(async (req, res) => {
+    const number = participantNumberParam(req);
+    if (number === null) return res.redirect('/admin/participants');
+
+    const participant = await participantsRepo.getByNumber(number);
+    if (!participant) {
+        return res.status(404).render('error', {
+            title: 'Not Found',
+            message: 'No officer with that participant number is on the roster.',
+            nav: 'admin',
+        });
+    }
+
+    const discarded = await db.transaction(async (client) => {
+        const attempt = await attemptsRepo.deleteForParticipant(number, client);
+        if (!attempt) return null;
+
+        await auditRepo.record({
+            adminUsername: req.admin.username,
+            action: auditRepo.ACTIONS.RETAKE_ALLOWED,
+            participantNumber: number,
+            // Captured before the row is gone — afterwards there is nothing
+            // left to describe.
+            detail: {
+                discarded_status: attempt.status,
+                discarded_score: attempt.score,
+                discarded_percentage: attempt.percentage,
+                discarded_knowledge_level: attempt.knowledge_level,
+                started_at: attempt.started_at,
+                submitted_at: attempt.submitted_at,
+            },
+            ipAddress: req.ip,
+        }, client);
+
+        return attempt;
+    });
+
+    // No attempt to clear is not an error — the officer can already sit it.
+    if (!discarded) return res.redirect('/admin/participants');
+    return res.redirect(`/admin/participants?retake=${number}`);
+}));
+
+/**
+ * Issue a new PIN for one officer.
+ *
+ * The seeder reissues all 32, which is right at setup and wrong on the day —
+ * an officer who mislays their slip would otherwise invalidate the 31 already
+ * distributed.
+ *
+ * The new PIN is rendered once, directly. It is deliberately not redirected to,
+ * flashed through the session, or logged: the session store is the database, so
+ * a flashed PIN would be written to disk in plaintext, which is the one thing
+ * this system avoids everywhere else.
+ */
+router.post('/participants/:participantNumber/reissue-pin', verifyCsrf, asyncHandler(async (req, res) => {
+    const number = participantNumberParam(req);
+    if (number === null) return res.redirect('/admin/participants');
+
+    const participant = await participantsRepo.getByNumber(number);
+    if (!participant) {
+        return res.status(404).render('error', {
+            title: 'Not Found',
+            message: 'No officer with that participant number is on the roster.',
+            nav: 'admin',
+        });
+    }
+
+    const pin = generatePin();
+
+    await db.transaction(async (client) => {
+        const updated = await participantsRepo.setPin(number, pin, client);
+        if (!updated) throw new Error(`Failed to set PIN for participant ${number}.`);
+
+        await auditRepo.record({
+            adminUsername: req.admin.username,
+            action: auditRepo.ACTIONS.PIN_REISSUED,
+            participantNumber: number,
+            // The PIN itself is never recorded, here or anywhere.
+            detail: { reason: 'facilitator reissue' },
+            ipAddress: req.ip,
+        }, client);
+    });
+
+    return res.render('admin/pin-reissued', {
+        title: 'New PIN issued',
+        nav: 'admin',
+        navTitle: 'Administration',
+        participant,
+        pin,
+    });
+}));
+
+// ── Audit log ────────────────────────────────────────────────────────────
+
+router.get('/audit', asyncHandler(async (req, res) => {
+    return res.render('admin/audit', {
+        title: 'Audit log',
+        nav: 'admin',
+        navTitle: 'Administration',
+        entries: await auditRepo.listRecent(200),
     });
 }));
 

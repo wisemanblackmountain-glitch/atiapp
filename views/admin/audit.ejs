@@ -1,0 +1,95 @@
+<%#
+  ADMINISTRATOR AUDIT LOG
+
+  Route:  GET /admin/audit
+  Layout: nav: 'admin'
+
+  Locals
+    title    String
+    entries  Array  [ { id, occurred_at, admin_username, action,
+                        participant_number, detail, ip_address } ]
+
+  Read-only. The table is append-only in the database and there is deliberately
+  no route that edits or removes a row — an audit that can be edited is not an
+  audit. PINs are never recorded, so none can appear here.
+%>
+
+<div class="container section">
+
+  <div class="row" style="margin-bottom:var(--sp-4)">
+    <div>
+      <span class="label-meta">Administration</span>
+      <h1 style="font-size:clamp(26px,3.4vw,34px);margin:0">Audit log</h1>
+    </div>
+    <span class="row-end"></span>
+    <a href="/admin/participants" class="btn btn-ghost btn-sm">Back to roster</a>
+  </div>
+
+  <p class="text-muted" style="max-width:68ch">
+    Every retake granted and every PIN reissued, with who did it and what was
+    discarded. This record is append-only and cannot be edited from the
+    application.
+  </p>
+
+  <% if (!entries || entries.length === 0) { %>
+    <div class="card" style="margin-top:var(--sp-4)">
+      <h3>Nothing recorded yet</h3>
+      <p class="text-muted" style="margin:0">
+        Entries appear here when a facilitator clears an attempt so an officer
+        can retake, or issues a replacement PIN.
+      </p>
+    </div>
+  <% } else { %>
+    <div class="table-wrap" style="margin-top:var(--sp-4)">
+      <table class="data-table">
+        <caption class="visually-hidden">Administrator actions, most recent first</caption>
+        <thead>
+          <tr>
+            <th scope="col">When</th>
+            <th scope="col">Facilitator</th>
+            <th scope="col">Action</th>
+            <th scope="col" class="num">Officer</th>
+            <th scope="col">Detail</th>
+            <th scope="col">From</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% entries.forEach(function (e) { %>
+            <tr>
+              <td class="font-mono" style="white-space:nowrap"><%= e.occurred_at %></td>
+              <td><%= e.admin_username %></td>
+              <td>
+                <% if (e.action === 'RETAKE_ALLOWED') { %>
+                  <span class="badge badge-warning">RETAKE ALLOWED</span>
+                <% } else { %>
+                  <span class="badge badge-accent">PIN REISSUED</span>
+                <% } %>
+              </td>
+              <td class="num font-mono">
+                <%= e.participant_number === null ? '—' : String(e.participant_number).padStart(2, '0') %>
+              </td>
+              <td class="text-muted" style="font-size:13px">
+                <% if (e.action === 'RETAKE_ALLOWED') { %>
+                  Discarded <%= (e.detail.discarded_status || 'attempt').toLowerCase().replace('_', ' ') %><%
+                  if (e.detail.discarded_score !== null && e.detail.discarded_score !== undefined) { %>,
+                    scoring <span class="font-mono"><%= e.detail.discarded_score %></span>
+                    <% if (e.detail.discarded_knowledge_level) { %>(<%= e.detail.discarded_knowledge_level %>)<% } %>
+                  <% } %>
+                <% } else { %>
+                  Previous PIN invalidated
+                <% } %>
+              </td>
+              <td class="font-mono text-faint" style="font-size:12px"><%= e.ip_address || '—' %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-faint" style="font-size:12.5px;margin-top:var(--sp-4)">
+      Showing the <%= entries.length %> most recent entries. PINs are never
+      recorded, in this log or anywhere else.
+    </p>
+  <% } %>
+
+</div>

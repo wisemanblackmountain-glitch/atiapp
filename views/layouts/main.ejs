@@ -104,6 +104,7 @@
         <a href="/admin/dashboard">Dashboard</a>
         <a href="/admin/participants">Roster</a>
         <a href="/admin/analytics">Analytics</a>
+        <a href="/admin/audit">Audit</a>
         <form method="POST" action="/logout" style="display:inline">
           <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
