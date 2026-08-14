@@ -10,6 +10,8 @@ node_modules/
 # ── Participant credentials & personal data ────────────────
 # Contains named officers and access PINs. Must never be tracked.
 participant-credentials.txt
+participant-credentials.*.txt
+participant-slips.html
 participants.txt
 
 # ── Official source documents ──────────────────────────────

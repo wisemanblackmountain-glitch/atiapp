@@ -215,53 +215,107 @@ describe('CSRF', () => {
 });
 
 describe('login rate limiting', () => {
-    test('allows five failures then locks', () => {
+    test('allows five failures against one account, then locks it', () => {
         const r = req('10.0.0.1');
         for (let i = 0; i < 4; i++) {
-            expect(rateLimit.recordFailure(r, 'participant').locked).toBe(false);
+            expect(rateLimit.recordFailure(r, 'participant', '7').locked).toBe(false);
         }
-        expect(rateLimit.recordFailure(r, 'participant').locked).toBe(true);
+        expect(rateLimit.recordFailure(r, 'participant', '7').locked).toBe(true);
     });
 
     test('counts down remaining attempts', () => {
         const r = req('10.0.0.2');
-        expect(rateLimit.getState(r, 'participant').remaining).toBe(5);
-        rateLimit.recordFailure(r, 'participant');
-        expect(rateLimit.getState(r, 'participant').remaining).toBe(4);
+        expect(rateLimit.getState(r, 'participant', '7').remaining).toBe(5);
+        rateLimit.recordFailure(r, 'participant', '7');
+        expect(rateLimit.getState(r, 'participant', '7').remaining).toBe(4);
     });
 
-    test('a successful sign-in clears the counter', () => {
+    test('a successful sign-in clears that account', () => {
         const r = req('10.0.0.3');
-        rateLimit.recordFailure(r, 'participant');
-        rateLimit.recordFailure(r, 'participant');
-        rateLimit.clear(r, 'participant');
-        expect(rateLimit.getState(r, 'participant').remaining).toBe(5);
+        rateLimit.recordFailure(r, 'participant', '7');
+        rateLimit.recordFailure(r, 'participant', '7');
+        rateLimit.clear(r, 'participant', '7');
+        expect(rateLimit.getState(r, 'participant', '7').remaining).toBe(5);
     });
 
-    test('tracks each address separately', () => {
-        const a = req('10.0.0.4');
-        const b = req('10.0.0.5');
-        for (let i = 0; i < 5; i++) rateLimit.recordFailure(a, 'participant');
-        expect(rateLimit.getState(a, 'participant').locked).toBe(true);
-        expect(rateLimit.getState(b, 'participant').locked).toBe(false);
+    // ── The scenario this design exists for ──────────────────────────────
+    test('one officer locking out does NOT lock the rest of the room', () => {
+        // 32 officers in a training room share one public IP. Under per-IP
+        // keying, five people each mistyping once would lock all 32 out.
+        const room = req('41.222.180.4');
+
+        for (let i = 0; i < 5; i++) rateLimit.recordFailure(room, 'participant', '7');
+        expect(rateLimit.getState(room, 'participant', '7').locked).toBe(true);
+
+        for (const other of ['1', '12', '19', '28', '32']) {
+            expect(rateLimit.getState(room, 'participant', other).locked).toBe(false);
+            expect(rateLimit.getState(room, 'participant', other).remaining).toBe(5);
+        }
+    });
+
+    test('a whole room fumbling twice each stays under the address ceiling', () => {
+        const room = req('41.222.180.5');
+        for (let officer = 1; officer <= 32; officer++) {
+            rateLimit.recordFailure(room, 'participant', String(officer));
+            rateLimit.recordFailure(room, 'participant', String(officer));
+        }
+        // 64 failures — every officer still has attempts left.
+        for (const officer of ['1', '16', '32']) {
+            expect(rateLimit.getState(room, 'participant', officer).locked).toBe(false);
+            expect(rateLimit.getState(room, 'participant', officer).remaining).toBe(3);
+        }
+    });
+
+    test('the address ceiling still catches guessing sprayed across accounts', () => {
+        const attacker = req('203.0.113.9');
+        // Four tries each against many accounts stays under the per-account
+        // limit every time, so only the address ceiling can stop it.
+        for (let n = 1; n <= 30; n++) {
+            for (let i = 0; i < 4; i++) rateLimit.recordFailure(attacker, 'participant', String(n));
+        }
+        expect(rateLimit.getState(attacker, 'participant', '99').locked).toBe(true);
+        expect(rateLimit.getState(attacker, 'participant', '99').reason).toBe('address');
+    });
+
+    test('an account lock does not follow the officer to another address', () => {
+        const office = req('10.0.0.4');
+        const home = req('10.0.0.5');
+        for (let i = 0; i < 5; i++) rateLimit.recordFailure(office, 'participant', '7');
+        expect(rateLimit.getState(office, 'participant', '7').locked).toBe(true);
+        // The account bucket is shared across addresses — a PIN must not become
+        // guessable simply by moving networks.
+        expect(rateLimit.getState(home, 'participant', '7').locked).toBe(true);
     });
 
     test('participant and admin lockouts are independent', () => {
         // A locked-out officer must not also lock the facilitator out of the
         // admin console from the same office address.
         const r = req('10.0.0.6');
-        for (let i = 0; i < 5; i++) rateLimit.recordFailure(r, 'participant');
-        expect(rateLimit.getState(r, 'participant').locked).toBe(true);
-        expect(rateLimit.getState(r, 'admin').locked).toBe(false);
+        for (let i = 0; i < 5; i++) rateLimit.recordFailure(r, 'participant', '7');
+        expect(rateLimit.getState(r, 'participant', '7').locked).toBe(true);
+        expect(rateLimit.getState(r, 'admin', 'ati-facilitator').locked).toBe(false);
+    });
+
+    test('padding and capitalisation cannot buy extra attempts', () => {
+        const r = req('10.0.0.8');
+        for (let i = 0; i < 5; i++) rateLimit.recordFailure(r, 'admin', 'ati-facilitator');
+        expect(rateLimit.getState(r, 'admin', 'ati-facilitator').locked).toBe(true);
     });
 
     test('reports when the lock lifts', () => {
         const r = req('10.0.0.7');
-        for (let i = 0; i < 5; i++) rateLimit.recordFailure(r, 'participant');
-        const state = rateLimit.getState(r, 'participant');
+        for (let i = 0; i < 5; i++) rateLimit.recordFailure(r, 'participant', '7');
+        const state = rateLimit.getState(r, 'participant', '7');
         expect(state.retryAt).toBeInstanceOf(Date);
         expect(state.retryAt.getTime()).toBeGreaterThan(Date.now());
         expect(rateLimit.formatRetryAt(state.retryAt)).toMatch(/^\d{2}:\d{2}$/);
+    });
+
+    test('a request with no identifier falls back to the address ceiling', () => {
+        const r = req('10.0.0.9');
+        const state = rateLimit.getState(r, 'participant', null);
+        expect(state.locked).toBe(false);
+        expect(state.remaining).toBe(5);
     });
 });
 

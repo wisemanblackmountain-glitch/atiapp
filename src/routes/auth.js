@@ -21,9 +21,28 @@ const {
     verifyCsrf,
     validateParticipantLogin,
     validateAdminLogin,
+    cleanDigits,
+    cleanText,
 } = require('../middleware/validation');
 
 const router = express.Router();
+
+/**
+ * Account identifiers for rate limiting.
+ *
+ * The guard and the failure handler must derive these identically, or they
+ * would count against different buckets and the limit would never trigger.
+ * Both are normalised: "07" and "7" are the same officer, and usernames are
+ * compared lower-case, so padding or capitalisation cannot buy extra attempts.
+ */
+function participantIdentifier(req) {
+    const n = Number(cleanDigits(req.body && req.body.participantNumber, 2));
+    return Number.isInteger(n) && n > 0 ? String(n) : null;
+}
+
+function adminIdentifier(req) {
+    return cleanText(req.body && req.body.username, 60).toLowerCase() || null;
+}
 
 /**
  * Regenerate the session on privilege change.
@@ -42,6 +61,7 @@ function regenerate(req) {
 
 router.get('/login', (req, res) => {
     if (req.participant) return res.redirect('/assessment/confirm');
+    // No participant number on a GET, so this reflects the address ceiling only.
     const state = rateLimit.getState(req, 'participant');
     res.render('auth/login', {
         title: 'Participant sign-in',
@@ -53,7 +73,7 @@ router.get('/login', (req, res) => {
 router.post(
     '/login',
     verifyCsrf,
-    rateLimit.guard('participant', 'auth/login'),
+    rateLimit.guard('participant', 'auth/login', participantIdentifier),
     asyncHandler(async (req, res) => {
         const check = validateParticipantLogin(req.body);
         if (!check.ok) {
@@ -71,7 +91,7 @@ router.post(
         );
 
         if (!participant) {
-            const state = rateLimit.recordFailure(req, 'participant');
+            const state = rateLimit.recordFailure(req, 'participant', participantIdentifier(req));
             return res.status(401).render('auth/login', {
                 title: 'Participant sign-in',
                 nav: 'none',
@@ -85,7 +105,7 @@ router.post(
             });
         }
 
-        rateLimit.clear(req, 'participant');
+        rateLimit.clear(req, 'participant', participantIdentifier(req));
         await regenerate(req);
         req.session.participantNumber = participant.participant_number;
 
@@ -108,7 +128,7 @@ router.get('/admin/login', (req, res) => {
 router.post(
     '/admin/login',
     verifyCsrf,
-    rateLimit.guard('admin', 'auth/admin-login'),
+    rateLimit.guard('admin', 'auth/admin-login', adminIdentifier),
     asyncHandler(async (req, res) => {
         const check = validateAdminLogin(req.body);
         if (!check.ok) {
@@ -122,7 +142,7 @@ router.post(
         const admin = await admins.verifyCredentials(check.data.username, check.data.password);
 
         if (!admin) {
-            const state = rateLimit.recordFailure(req, 'admin');
+            const state = rateLimit.recordFailure(req, 'admin', adminIdentifier(req));
             return res.status(401).render('auth/admin-login', {
                 title: 'Facilitator sign-in',
                 nav: 'none',
@@ -131,7 +151,7 @@ router.post(
             });
         }
 
-        rateLimit.clear(req, 'admin');
+        rateLimit.clear(req, 'admin', adminIdentifier(req));
         await regenerate(req);
         req.session.adminUsername = admin.username;
 

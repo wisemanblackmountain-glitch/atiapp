@@ -1,7 +1,7 @@
 /**
  * ATI ZMATF Executive Training Assessment System
  *
- * Express + EJS, Firestore for persistence, deployed to Render.
+ * Express + EJS, PostgreSQL (Neon) for persistence, deployed to Render.
  *
  * ── Architecture ────────────────────────────────────────────────────────────
  * The browser never talks to the database. This process is its only client, so

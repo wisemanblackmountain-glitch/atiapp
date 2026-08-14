@@ -87,12 +87,33 @@ function validateAssessment(data) {
     }
 }
 
-function writeCredentials(issued) {
+/**
+ * Write the credentials file, preserving whatever was there before.
+ *
+ * This file is the only record of the plaintext PINs — the database holds
+ * bcrypt hashes and nothing can reverse them. Overwriting it silently means an
+ * accidental reseed against the wrong database destroys a live cohort's
+ * credentials with no way back. So the previous file is archived first, and the
+ * header records which database the PINs belong to: a file that says
+ * "localhost" is immediately recognisable as not the production set.
+ */
+function writeCredentials(issued, target) {
+    if (fs.existsSync(CREDENTIALS_FILE)) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const archive = path.join(ROOT, `participant-credentials.${stamp}.txt`);
+        fs.renameSync(CREDENTIALS_FILE, archive);
+        console.log(`  previous file  archived as ${path.basename(archive)}`);
+    }
+
     const lines = [
         'ATI ZMATF EXECUTIVE TRAINING PROGRAMME',
         'Pre-Training Diagnostic Assessment — participant access credentials',
         '',
         `Issued: ${new Date().toISOString()}`,
+        `Database: ${target}`,
+        '',
+        'These PINs are valid ONLY against the database named above. A file',
+        'issued against localhost will not work in production, and vice versa.',
         '',
         'CONFIDENTIAL. Distribute each officer only their own row, through a',
         'private channel. This file is gitignored and must never be committed,',
@@ -187,7 +208,7 @@ async function main() {
         await participantsRepo.replaceAll(
             roster.map((person, i) => Object.assign({}, person, { pin: issued[i].pin }))
         );
-        writeCredentials(issued);
+        writeCredentials(issued, pool.describeTarget());
         console.log(`  participants   ${issued.length} seeded, PINs reissued`);
     }
 
