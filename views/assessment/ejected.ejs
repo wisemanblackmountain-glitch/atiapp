@@ -1,0 +1,52 @@
+<%#
+  EJECTED — the assessment window was left
+
+  Route:  GET /assessment/ejected
+  Layout: nav: 'none'
+
+  Reachable without a session, because the session has just been destroyed.
+  Carries no participant detail for the same reason — and because anyone who
+  reaches this URL directly should learn nothing from it.
+
+  The tone here is deliberate. The officer may well have done nothing wrong: a
+  call came in, the screen locked, a notification stole focus. Accusing them
+  would be both unpleasant and, often, incorrect. It states what happened and
+  what to do next.
+%>
+
+<div class="container container-narrow section">
+
+  <div class="card card-lg">
+    <span class="label-meta">Session ended</span>
+    <h1 style="font-size:clamp(24px,3vw,32px);margin-bottom:var(--sp-3)">
+      Your assessment window was closed
+    </h1>
+
+    <p style="font-size:16px;color:var(--text-muted)">
+      The assessment must stay open in a single window until you submit. Your
+      session has ended because the window was left or hidden.
+    </p>
+
+    <div class="alert alert-danger" role="alert" style="margin:var(--sp-5) 0">
+      <strong>Your answers are safe.</strong> Everything you had already
+      answered is saved. You will return to the same assessment, not a new one.
+    </div>
+
+    <h3>What to do now</h3>
+    <ol class="text-muted" style="font-size:15px;padding-left:var(--sp-5);margin:0 0 var(--sp-5)">
+      <li style="margin-bottom:var(--sp-2)">Speak to the facilitator running the session.</li>
+      <li style="margin-bottom:var(--sp-2)">They will issue you a new access PIN.</li>
+      <li>Sign in again with your participant number, surname and the new PIN.</li>
+    </ol>
+
+    <p class="text-faint" style="font-size:13px;margin:0">
+      The ten-minute limit continues to run, so speak to the facilitator
+      promptly. Your previous PIN no longer works.
+    </p>
+  </div>
+
+  <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+    <a href="/login" class="btn btn-terracotta">Return to sign-in</a>
+  </div>
+
+</div>

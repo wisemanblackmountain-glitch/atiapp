@@ -16,8 +16,11 @@
 
 const express = require('express');
 
+const db = require('../data/pool');
 const questionsRepo = require('../data/questions');
 const attemptsRepo = require('../data/attempts');
+const participantsRepo = require('../data/participants');
+const proctoring = require('../data/proctoring');
 const timer = require('../utils/timer');
 const scoring = require('../engines/scoring');
 const randomization = require('../engines/randomization');
@@ -202,7 +205,7 @@ router.get('/questions/:number', loadAttempt({ requireInProgress: true }), async
         title: `Question ${number}`,
         navTitle: 'Diagnostic Assessment',
         navCounter: `Q ${String(number).padStart(2, '0')} / ${TOTAL_QUESTIONS}`,
-        scripts: ['/js/timer.js', '/js/assessment.js'],
+        scripts: ['/js/timer.js', '/js/assessment.js', '/js/proctor.js'],
         question,
         choices: randomization.buildChoices(mapping, optionsPublic),
         selectedPosition: response ? response.selected_display_position : null,
@@ -250,6 +253,86 @@ router.post('/save-answer', verifyCsrf, loadAttempt(), asyncHandler(async (req, 
     });
 }));
 
+// ── Proctoring ───────────────────────────────────────────────────────────
+
+/**
+ * Report that the assessment tab was hidden.
+ *
+ * Called by public/js/proctor.js when the officer returns, and by sendBeacon if
+ * they never do. Brief hides are ignored — a notification banner is not a tab
+ * switch, and treating it as one would eject people who did nothing.
+ *
+ * The response tells the client what happened, so the officer sees a warning or
+ * a redirect rather than silently continuing on a dead session.
+ */
+router.post('/proctor-event', verifyCsrf, loadAttempt(), asyncHandler(async (req, res) => {
+    if (!req.attempt || req.attempt.status !== 'IN_PROGRESS') {
+        return res.json({ status: 'ignored' });
+    }
+
+    const number = req.participant.participant_number;
+    const hiddenMs = Number(req.body && req.body.hiddenMs) || 0;
+
+    if (hiddenMs < proctoring.GRACE_MS) {
+        return res.json({ status: 'ok', ignored: 'below-grace' });
+    }
+
+    await proctoring.record({
+        participantNumber: number,
+        eventType: proctoring.EVENTS.HIDDEN,
+        hiddenMs,
+        detail: { question: req.body.question || null },
+    });
+
+    const strikes = await proctoring.strikeCount(number);
+
+    if (strikes < proctoring.STRIKES) {
+        await proctoring.record({
+            participantNumber: number,
+            eventType: proctoring.EVENTS.WARNED,
+            hiddenMs,
+        });
+        return res.json({
+            status: 'warned',
+            strikes,
+            limit: proctoring.STRIKES,
+            message: 'Leaving the assessment window again will end your session.',
+        });
+    }
+
+    // Ejection. Access is withdrawn before the session is destroyed, so there
+    // is no window in which the officer could sign straight back in with the
+    // PIN they are holding.
+    await db.transaction(async (client) => {
+        await participantsRepo.revokePin(number, client);
+        await proctoring.record({
+            participantNumber: number,
+            eventType: proctoring.EVENTS.EJECTED,
+            hiddenMs,
+            detail: { strikes },
+        }, client);
+    });
+
+    // The attempt and its answers are left untouched — the officer resumes
+    // where they were once the facilitator issues a new PIN. The deadline keeps
+    // running, which is the point.
+    return req.session.destroy(() => {
+        res.json({
+            status: 'ejected',
+            redirect: '/assessment/ejected',
+        });
+    });
+}));
+
+/** Shown after an ejection. Deliberately reachable without a session. */
+router.get('/ejected', (req, res) => {
+    res.render('assessment/ejected', {
+        title: 'Assessment session ended',
+        nav: 'none',
+        layout: 'layouts/main',
+    });
+});
+
 // ── Review ───────────────────────────────────────────────────────────────
 
 router.get('/review', loadAttempt({ requireInProgress: true }), asyncHandler(async (req, res) => {
@@ -273,7 +356,7 @@ router.get('/review', loadAttempt({ requireInProgress: true }), asyncHandler(asy
     return res.render('assessment/review', timedNav(req.attempt, {
         title: 'Review your answers',
         navTitle: 'Review answers',
-        scripts: ['/js/timer.js'],
+        scripts: ['/js/timer.js', '/js/proctor.js'],
         stats: { total: items.length, answered, unanswered: items.length - answered },
         items,
         deadline: req.attempt.deadline_at,

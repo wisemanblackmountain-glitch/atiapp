@@ -25,8 +25,24 @@ CREATE TABLE IF NOT EXISTS participants (
     last_name           TEXT         NOT NULL CHECK (length(btrim(last_name)) > 0),
     pin_hash            TEXT         NOT NULL,
     is_active           BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+
+    -- When the current PIN was issued, and when the officer last signed in.
+    -- Together these answer "has this PIN been used yet?", which gates
+    -- reissue: a PIN may be regenerated freely while it is still untried,
+    -- because that is when distribution mistakes surface.
+    --
+    -- Comparing the two rather than storing a boolean means reissuing
+    -- automatically resets the state — the new PIN is untried again, with no
+    -- separate flag to keep in step.
+    pin_issued_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    last_signed_in_at   TIMESTAMPTZ
 );
+
+-- Added after the initial release; both are idempotent so existing databases
+-- pick them up on the next boot without a separate migration step.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS pin_issued_at     TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS last_signed_in_at TIMESTAMPTZ;
 
 -- Surname lookups are case-insensitive at sign-in.
 CREATE INDEX IF NOT EXISTS idx_participants_last_name
@@ -155,6 +171,38 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
+
+-- ── Proctoring ───────────────────────────────────────────────────────────
+-- Records the assessment tab being hidden — switched away from, minimised, or
+-- the device locked — while an attempt is in progress.
+--
+-- No foreign keys, for the same reason as the audit table: these rows are
+-- evidence and must outlive the attempt they describe, including when a
+-- facilitator clears that attempt to allow a retake.
+--
+-- Worth being honest about what this can and cannot see. The browser reports
+-- its own visibility, so it catches a second tab and misses a second device.
+-- It detects carelessness, not determination.
+CREATE TABLE IF NOT EXISTS proctoring_events (
+    id                 BIGSERIAL   PRIMARY KEY,
+    participant_number SMALLINT    NOT NULL,
+    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    event_type         TEXT        NOT NULL
+                       CHECK (event_type IN ('HIDDEN', 'WARNED', 'EJECTED')),
+    -- How long the tab was away. Brief hides are usually a notification
+    -- stealing focus rather than anyone leaving the page.
+    hidden_ms          INTEGER,
+    detail             JSONB       NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_proctor_participant
+    ON proctoring_events (participant_number, occurred_at DESC);
+
+-- Set when an officer is ejected. Their PIN is replaced with an unguessable
+-- value at the same time, so the column exists to tell them *why* sign-in
+-- fails — "see the facilitator" rather than a bare credential error, since the
+-- facilitator is standing in the same room.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS pin_revoked_at TIMESTAMPTZ;
 
 -- ── Administrator audit ──────────────────────────────────────────────────
 -- Records destructive facilitator actions: clearing an attempt so an officer

@@ -1,0 +1,77 @@
+<%#
+  BULK PIN REISSUE RESULT — shown once
+
+  Route:  POST /admin/participants/reissue-pins
+  Layout: nav: 'admin'
+
+  Locals
+    title    String
+    scope    'all' | 'untried'
+    issued   Array  [ { participant, pin } ]
+    skipped  Int    officers not included by the chosen scope
+
+  Every PIN below is shown once. The database holds bcrypt hashes and nothing
+  can reverse them, so this render is the only opportunity to read these values.
+  Rendered directly rather than redirected to, because a redirect would carry
+  them through the session — and the session store is the database.
+%>
+
+<div class="container section">
+
+  <div class="label-meta">Bulk reissue</div>
+  <h1 style="font-size:clamp(24px,3vw,32px)"><%= issued.length %> new PINs issued</h1>
+
+  <div class="alert alert-danger" role="alert" style="margin-bottom:var(--sp-5)">
+    <strong>These PINs are shown once.</strong> They cannot be recovered from
+    this screen or anywhere else — reloading will not bring them back. Print
+    this page before you navigate away.
+    <% if (skipped > 0) { %>
+      <br><br><%= skipped %>
+      <%= skipped === 1 ? 'officer was' : 'officers were' %> left untouched by
+      the scope you chose, and keep the PIN already issued to them.
+    <% } %>
+  </div>
+
+  <div class="row" style="gap:var(--sp-3);margin-bottom:var(--sp-4)" data-no-print>
+    <button type="button" class="btn btn-terracotta" onclick="window.print()">Print</button>
+    <a href="/admin/participants" class="btn btn-ghost">Back to roster</a>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="visually-hidden">Newly issued PINs, one row per officer</caption>
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Surname</th>
+          <th scope="col">New PIN</th>
+          <th scope="col">Officer</th>
+          <th scope="col">Agency</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% issued.forEach(function (row) { %>
+          <tr>
+            <td class="font-mono"><%= String(row.participant.participant_number).padStart(2, '0') %></td>
+            <td class="font-mono">
+              <%= String(row.participant.full_name).split(' ').pop().toUpperCase() %>
+            </td>
+            <td class="font-mono"
+                style="font-size:17px;font-weight:600;letter-spacing:.14em;color:var(--accent)">
+              <%= row.pin %>
+            </td>
+            <td><%= row.participant.full_name %></td>
+            <td class="text-muted" style="font-size:13px"><%= row.participant.agency %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-faint" style="font-size:12.5px;margin-top:var(--sp-4)">
+    Every previous PIN for these officers stopped working the moment this page
+    rendered. Hand each officer only their own row. For individual cut-out
+    slips, run <code>npm run build:slips</code> after a full reseed instead.
+  </p>
+
+</div>

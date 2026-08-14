@@ -20,6 +20,7 @@ const db = require('../data/pool');
 const participantsRepo = require('../data/participants');
 const attemptsRepo = require('../data/attempts');
 const auditRepo = require('../data/audit');
+const proctoring = require('../data/proctoring');
 const scoring = require('../engines/scoring');
 const asyncHandler = require('../utils/asyncHandler');
 const { requireAdmin } = require('../middleware/auth');
@@ -91,8 +92,18 @@ router.get('/participants', asyncHandler(async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const status = STATUSES.includes(req.query.status) ? req.query.status : '';
 
-    const all = await attemptsRepo.rosterWithAttempts();
+    const [all, proctorSummary] = await Promise.all([
+        attemptsRepo.rosterWithAttempts(),
+        proctoring.summary(),
+    ]);
     const needle = q.toLowerCase();
+
+    // Attach proctoring state so the roster shows at a glance who has left the
+    // window — this is the "facilitator is notified" half of the rule.
+    all.forEach((row) => {
+        const p = proctorSummary[row.participant_number];
+        row.proctor = p || { hidden: 0, warned: 0, ejected: 0 };
+    });
 
     // Filtered in memory rather than SQL: the roster is 32 rows, and a LIKE
     // across four columns would be more machinery than the problem needs.
@@ -198,6 +209,31 @@ router.post('/participants/:participantNumber/reissue-pin', verifyCsrf, asyncHan
         });
     }
 
+    /*
+     * A PIN may be regenerated freely while it is still untried — that is when
+     * distribution mistakes surface, and reissuing costs nothing because nobody
+     * has used it.
+     *
+     * Once the officer has signed in, the PIN has done its job and changing it
+     * disrupts them, so reissue is refused. Refused rather than forbidden: an
+     * officer who signs in on one day and loses their slip before the next would
+     * otherwise be stranded with no route back in. The override requires a
+     * separate deliberate action and is audited distinctly, so "why does officer
+     * 12 have three PINs?" stays answerable.
+     */
+    const usage = await participantsRepo.pinUsage(number);
+    const override = req.body.override === '1';
+
+    if (usage && usage.used && !override) {
+        return res.status(409).render('admin/pin-blocked', {
+            title: 'PIN already used',
+            nav: 'admin',
+            navTitle: 'Administration',
+            participant,
+            usage,
+        });
+    }
+
     const pin = generatePin();
 
     await db.transaction(async (client) => {
@@ -209,7 +245,9 @@ router.post('/participants/:participantNumber/reissue-pin', verifyCsrf, asyncHan
             action: auditRepo.ACTIONS.PIN_REISSUED,
             participantNumber: number,
             // The PIN itself is never recorded, here or anywhere.
-            detail: { reason: 'facilitator reissue' },
+            detail: usage && usage.used
+                ? { reason: 'facilitator reissue', overrode_used_pin: true }
+                : { reason: 'facilitator reissue', pin_was_untried: true },
             ipAddress: req.ip,
         }, client);
     });
@@ -220,6 +258,67 @@ router.post('/participants/:participantNumber/reissue-pin', verifyCsrf, asyncHan
         navTitle: 'Administration',
         participant,
         pin,
+    });
+}));
+
+/**
+ * Reissue PINs for many officers at once.
+ *
+ * The seeder can already do this, but only by discarding every attempt — safe
+ * before a cohort starts, destructive once anyone has sat it. Mistakes with
+ * printed slips do not respect that boundary, so this route reissues in bulk
+ * and leaves attempts, responses and scores untouched.
+ *
+ * scope:
+ *   all          every active officer
+ *   not_started  only those yet to begin — the safe default when an
+ *                assessment is already under way, since it cannot disturb
+ *                anyone mid-attempt
+ */
+router.post('/participants/reissue-pins', verifyCsrf, asyncHandler(async (req, res) => {
+    const scope = req.body.scope === 'all' ? 'all' : 'not_started';
+
+    const roster = await attemptsRepo.rosterWithAttempts();
+    const targets = scope === 'all'
+        ? roster
+        : roster.filter((r) => r.status === 'NOT_STARTED');
+
+    if (targets.length === 0) {
+        return res.redirect('/admin/participants');
+    }
+
+    // Hash outside the transaction. bcrypt is CPU-bound and pure JS, so 32 of
+    // them takes seconds — long enough to hold a database connection open
+    // needlessly and risk the statement timeout.
+    const issued = [];
+    for (const t of targets) {
+        issued.push({ participant: t, pin: generatePin() });
+    }
+    const hashes = await Promise.all(issued.map((i) => participantsRepo.hashPin(i.pin)));
+
+    await db.transaction(async (client) => {
+        for (let i = 0; i < issued.length; i++) {
+            await client.query(
+                'UPDATE participants SET pin_hash = $2 WHERE participant_number = $1',
+                [issued[i].participant.participant_number, hashes[i]]
+            );
+            await auditRepo.record({
+                adminUsername: req.admin.username,
+                action: auditRepo.ACTIONS.PIN_REISSUED,
+                participantNumber: issued[i].participant.participant_number,
+                detail: { reason: 'bulk reissue', scope },
+                ipAddress: req.ip,
+            }, client);
+        }
+    });
+
+    return res.render('admin/pins-reissued', {
+        title: 'PINs reissued',
+        nav: 'admin',
+        navTitle: 'Administration',
+        scope,
+        issued,
+        skipped: roster.length - targets.length,
     });
 }));
 

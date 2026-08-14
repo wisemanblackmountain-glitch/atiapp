@@ -90,6 +90,28 @@ router.post(
             participantNumber, lastName, accessPin
         );
 
+        /*
+         * Access withdrawn by proctoring gets its own message.
+         *
+         * Normally the login refuses to say which field was wrong, because
+         * that would let a caller enumerate participant numbers. This is the
+         * one exception, and it is safe: revocation only ever follows a
+         * successful sign-in, so the caller already proved they hold the
+         * credentials. Telling them "credentials do not match" would send an
+         * officer hunting for a typo that does not exist, while the facilitator
+         * who can actually help is standing beside them.
+         */
+        if (!participant && await participants.isRevoked(participantNumber)) {
+            rateLimit.recordFailure(req, 'participant', participantIdentifier(req));
+            return res.status(401).render('auth/login', {
+                title: 'Participant sign-in',
+                nav: 'none',
+                error: 'Your access was withdrawn because the assessment window was closed. '
+                    + 'Speak to the facilitator, who will issue you a new PIN.',
+                values: check.values,
+            });
+        }
+
         if (!participant) {
             const state = rateLimit.recordFailure(req, 'participant', participantIdentifier(req));
             return res.status(401).render('auth/login', {
@@ -106,6 +128,11 @@ router.post(
         }
 
         rateLimit.clear(req, 'participant', participantIdentifier(req));
+
+        // Marks the PIN as used, which closes off casual reissue from the
+        // roster. Awaited so the state is settled before the officer can act.
+        await participants.recordSignIn(participant.participant_number);
+
         await regenerate(req);
         req.session.participantNumber = participant.participant_number;
 

@@ -98,7 +98,13 @@ function hashPin(pin) {
  */
 async function setPin(participantNumber, pin, client = null) {
     const hash = await hashPin(pin);
-    const sql = `UPDATE participants SET pin_hash = $2 WHERE participant_number = $1`;
+    // pin_issued_at moves forward, which resets the "untried" state — the new
+    // PIN has not been used, whatever the old one's history.
+    // Clearing pin_revoked_at is what makes reissue the remedy for an
+    // ejection: the officer gets a working PIN and a clean slate.
+    const sql = `UPDATE participants
+                    SET pin_hash = $2, pin_issued_at = now(), pin_revoked_at = NULL
+                  WHERE participant_number = $1`;
     const params = [participantNumber, hash];
 
     if (client) {
@@ -107,6 +113,82 @@ async function setPin(participantNumber, pin, client = null) {
     }
     const res = await db.execute(sql, params);
     return res.rowCount > 0;
+}
+
+/**
+ * Withdraw an officer's access.
+ *
+ * Used when proctoring ejects someone. The PIN is replaced with a value nobody
+ * holds — including us — rather than blanked, so no code path can treat an
+ * empty hash as a match. pin_revoked_at records why, which lets sign-in say
+ * "see the facilitator" instead of a bare credential failure. That matters
+ * because the facilitator is standing in the same room, and a confusing error
+ * would send the officer hunting for a typo that isn't there.
+ *
+ * A reissue clears the revocation: setPin overwrites the hash, and the routes
+ * below clear the timestamp alongside it.
+ */
+async function revokePin(participantNumber, client = null) {
+    const unguessable = await bcrypt.hash(
+        require('crypto').randomBytes(24).toString('hex'), BCRYPT_ROUNDS
+    );
+    const sql = `UPDATE participants
+                    SET pin_hash = $2, pin_revoked_at = now()
+                  WHERE participant_number = $1`;
+    const params = [participantNumber, unguessable];
+    if (client) return (await client.query(sql, params)).rowCount > 0;
+    return (await db.execute(sql, params)).rowCount > 0;
+}
+
+/** True when access was withdrawn and not since reissued. */
+async function isRevoked(participantNumber) {
+    const row = await db.queryOne(
+        'SELECT pin_revoked_at FROM participants WHERE participant_number = $1',
+        [participantNumber]
+    );
+    return Boolean(row && row.pin_revoked_at);
+}
+
+/**
+ * Stamp a successful sign-in.
+ *
+ * This is what makes a PIN "tried". Recorded on sign-in rather than on
+ * starting an attempt, because an officer who signs in and reads the briefing
+ * has used their PIN even if they never press begin — and a reissue at that
+ * point would strand them.
+ *
+ * Failures are swallowed: a bookkeeping write must never turn a valid sign-in
+ * into an error.
+ */
+async function recordSignIn(participantNumber) {
+    try {
+        await db.execute(
+            'UPDATE participants SET last_signed_in_at = now() WHERE participant_number = $1',
+            [participantNumber]
+        );
+    } catch (err) {
+        console.error('Could not record sign-in time:', err.message);
+    }
+}
+
+/**
+ * Has the current PIN been used since it was issued?
+ *
+ * Returns { used, lastSignedInAt, pinIssuedAt } or null if no such officer.
+ */
+async function pinUsage(participantNumber) {
+    const row = await db.queryOne(
+        `SELECT pin_issued_at, last_signed_in_at,
+                (last_signed_in_at IS NOT NULL AND last_signed_in_at >= pin_issued_at) AS used
+           FROM participants WHERE participant_number = $1`,
+        [participantNumber]
+    );
+    if (!row) return null;
+    return {
+        used: Boolean(row.used),
+        pinIssuedAt: row.pin_issued_at,
+        lastSignedInAt: row.last_signed_in_at,
+    };
 }
 
 /**
@@ -146,5 +228,9 @@ module.exports = {
     verifyCredentials,
     hashPin,
     setPin,
+    revokePin,
+    isRevoked,
+    recordSignIn,
+    pinUsage,
     replaceAll,
 };

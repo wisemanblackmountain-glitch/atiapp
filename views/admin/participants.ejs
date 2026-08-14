@@ -78,6 +78,7 @@
             <th scope="col">Officer</th>
             <th scope="col">Agency</th>
             <th scope="col">Status</th>
+            <th scope="col">Window</th>
             <th scope="col" class="num">Score</th>
             <th scope="col">Level</th>
             <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -101,6 +102,24 @@
                   <span class="badge badge-accent">IN PROGRESS</span>
                 <% } else { %>
                   <span class="badge">NOT STARTED</span>
+                <% } %>
+              </td>
+              <%#
+                Assessment-window state. Deliberately reports what was observed
+                rather than a verdict: a hidden window may be a switched tab or
+                a phone call, and the badge should not decide which.
+              %>
+              <td>
+                <% var pr = p.proctor || { hidden: 0, warned: 0, ejected: 0 }; %>
+                <% if (pr.ejected > 0) { %>
+                  <span class="badge badge-warning">EJECTED</span>
+                <% } else if (pr.hidden > 0) { %>
+                  <span class="badge badge-accent"
+                        title="The assessment window was hidden <%= pr.hidden %> time<%= pr.hidden === 1 ? '' : 's' %>">
+                    LEFT &times;<%= pr.hidden %>
+                  </span>
+                <% } else { %>
+                  <span class="text-faint">—</span>
                 <% } %>
               </td>
               <td class="num font-mono">

@@ -1,0 +1,72 @@
+<%#
+  REISSUE REFUSED — the current PIN has already been used
+
+  Route:  POST /admin/participants/:participantNumber/reissue-pin  (409)
+  Layout: nav: 'admin'
+
+  Locals
+    title        String
+    participant  Object
+    usage        Object  { used, pinIssuedAt, lastSignedInAt }
+
+  A PIN may be regenerated freely while untried — that is when distribution
+  mistakes surface. Once the officer has signed in it has done its job, and
+  changing it disrupts them.
+
+  Refused, not forbidden. An officer who signs in one day and loses their slip
+  before the next would otherwise have no route back in. The override below is a
+  separate deliberate action and is audited distinctly.
+%>
+
+<div class="container container-narrow section">
+
+  <div class="label-meta">Reissue refused</div>
+  <h1 style="font-size:clamp(24px,3vw,32px)">
+    <%= participant.full_name %> has already used this PIN
+  </h1>
+
+  <div class="alert alert-danger" role="alert" style="margin-bottom:var(--sp-5)">
+    This officer signed in with their current PIN, so it is no longer an unused
+    slip that can be quietly replaced. Issuing a new one will lock them out of
+    the PIN they are holding.
+  </div>
+
+  <div class="card">
+    <table class="data-table" style="min-width:0">
+      <tbody>
+        <tr>
+          <td style="width:44%;color:var(--text-muted)">Officer</td>
+          <td><strong><%= participant.full_name %></strong>
+              &middot; <span class="font-mono">#<%= participant.participant_number %></span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text-muted)">Current PIN issued</td>
+          <td class="font-mono"><%= usage.pinIssuedAt %></td>
+        </tr>
+        <tr style="border-bottom:0">
+          <td style="color:var(--text-muted)">Officer signed in</td>
+          <td class="font-mono"><%= usage.lastSignedInAt %></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-top:var(--sp-6)">If they have genuinely lost access</h3>
+  <p class="text-muted" style="max-width:64ch">
+    Issue a replacement anyway. Their current PIN stops working immediately, so
+    only do this if you can hand them the new one. It is recorded in the audit
+    log as an override, distinct from a routine reissue.
+  </p>
+
+  <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-4)">
+    <form method="POST"
+          action="/admin/participants/<%= participant.participant_number %>/reissue-pin"
+          onsubmit="return confirm('Issue a replacement PIN for <%= participant.full_name.replace(/'/g, "\\'") %> anyway?\n\nThey have already signed in with their current PIN. It will stop working the moment you confirm, so make sure you can hand them the new one.');">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+      <input type="hidden" name="override" value="1">
+      <button type="submit" class="btn btn-terracotta">Issue replacement anyway</button>
+    </form>
+    <a href="/admin/participants" class="btn btn-ghost">Back to roster</a>
+  </div>
+
+</div>
