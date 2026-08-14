@@ -17,29 +17,29 @@
   <% } %>
 
   <%#
-    TYPEFACES — self-hosted.
+    TYPEFACES
 
-    Drop these subsetted woff2 files into public/fonts/:
+    Served from Google Fonts. All three families are OFL-licensed, so
+    self-hosting is the better end state: it removes a render-blocking
+    third-party round trip on the variable connectivity this cohort works over,
+    and lets the CSP in server.js drop fonts.googleapis.com and
+    fonts.gstatic.com entirely.
+
+    To self-host, put subsetted woff2 files in public/fonts/ —
       source-serif-4-600.woff2
-      fira-sans-400.woff2   fira-sans-650.woff2
-      ibm-plex-mono-400.woff2   ibm-plex-mono-600.woff2
+      fira-sans-400.woff2      fira-sans-650.woff2
+      ibm-plex-mono-400.woff2  ibm-plex-mono-600.woff2
+    — then restore the @font-face block documented in DEPLOYMENT.md §7 and
+    delete the two links below.
 
-    All three families are OFL-licensed and free to self-host. Until the files
-    are present the @font-face rules in style.css fail silently and the humanist
-    system fallbacks take over, so the app renders correctly either way.
-
-    Self-hosting removes a render-blocking third-party round trip on the
-    variable connectivity this cohort works over, and lets the CSP in server.js
-    drop fonts.googleapis.com and fonts.gstatic.com entirely.
-
-    To use Google Fonts as an interim bridge instead, uncomment the two links
-    below. The CSP in server.js already permits both origins.
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600&family=Fira+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+    preconnect matters more than it looks: the stylesheet and the font files
+    come from different origins, so without it the browser pays two sequential
+    DNS and TLS handshakes before any text can paint.
   %>
-  <link rel="preload" as="font" type="font/woff2" href="/fonts/fira-sans-400.woff2" crossorigin>
-  <link rel="preload" as="font" type="font/woff2" href="/fonts/source-serif-4-600.woff2" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Fira+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
 
   <link rel="stylesheet" href="/css/style.css">
 </head>
