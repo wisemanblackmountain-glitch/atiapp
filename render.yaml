@@ -48,12 +48,14 @@ services:
       - key: SESSION_SECRET
         generateValue: true
 
-      # Facilitator account. Consumed by database/seed.js, which is run from an
-      # operator machine — see DEPLOYMENT.md — not by this service.
-      - key: ADMIN_USERNAME
-        sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
+      # ── Note: ADMIN_USERNAME and ADMIN_PASSWORD are deliberately absent ──
+      # They are read only by database/seed.js, which hashes the password into
+      # the admin_users table. Seeding runs from an operator machine, because
+      # the assessment content and roster are gitignored and must never reach
+      # deployed infrastructure. The running service authenticates against the
+      # database and never reads those variables, so holding a copy of the
+      # facilitator password in the Render environment would be an exposure
+      # with no corresponding use.
 
       - key: ASSESSMENT_DURATION
         value: "10"

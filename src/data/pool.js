@@ -25,7 +25,16 @@ function connectionString() {
             'or at the local container for development.'
         );
     }
-    return url;
+
+    // Neon hands out URLs ending in ?sslmode=require. TLS is configured
+    // explicitly below and takes precedence, so the parameter is redundant —
+    // but pg still parses it and warns that 'require' currently means
+    // 'verify-full' and will change meaning in pg 9. Stripping it removes the
+    // warning and, more usefully, leaves exactly one place where TLS is
+    // decided instead of two that could disagree.
+    return url.replace(/([?&])(sslmode|channel_binding)=[^&]*/gi, '$1')
+        .replace(/[?&]$/, '')
+        .replace(/\?&/, '?');
 }
 
 /**
