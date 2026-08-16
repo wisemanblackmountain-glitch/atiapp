@@ -104,7 +104,13 @@
         <a href="/admin/dashboard">Dashboard</a>
         <a href="/admin/participants">Roster</a>
         <a href="/admin/analytics">Analytics</a>
-        <a href="/admin/audit">Audit</a>
+        <% if (admin && admin.role !== 'VIEWER') { %>
+          <a href="/admin/audit">Audit</a>
+        <% } %>
+        <% if (admin && admin.role === 'OWNER') { %>
+          <a href="/admin/team">Team</a>
+        <% } %>
+        <a href="/admin/account" title="<%= admin ? admin.full_name : '' %>">Account</a>
         <form method="POST" action="/logout" style="display:inline">
           <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">

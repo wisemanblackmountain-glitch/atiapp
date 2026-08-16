@@ -1,0 +1,66 @@
+<%#
+  REDEEM AN INVITATION
+
+  Route:  GET /admin/join, POST /admin/join
+  Layout: nav: 'none'
+
+  The one administrator route reachable without signing in — necessarily, since
+  the person using it has no account yet. It is gated entirely by possession of
+  a valid, unexpired, unredeemed invitation code.
+
+  Locals: values? { code, username }, error?, minLength
+%>
+
+<div class="container container-narrow section">
+
+  <span class="label-meta">Administration</span>
+  <h1 style="font-size:clamp(24px,3vw,32px)">Set up your account</h1>
+  <p class="text-muted" style="max-width:60ch">
+    Enter the invitation code you were given, then choose your own username and
+    password. Nobody else will know them.
+  </p>
+
+  <form method="POST" action="/admin/join" class="card card-lg" style="max-width:520px" novalidate>
+    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+
+    <div class="form-group">
+      <label for="code" class="form-label">
+        <span>Invitation code</span><span class="form-hint">XXXX-XXXX-XXXX-XXXX</span>
+      </label>
+      <input type="text" id="code" name="code" class="form-input font-mono"
+             autocomplete="off" spellcheck="false" required
+             placeholder="XXXX-XXXX-XXXX-XXXX"
+             value="<%= typeof values !== 'undefined' && values.code ? values.code : '' %>">
+    </div>
+
+    <div class="form-group">
+      <label for="username" class="form-label">
+        <span>Choose a username</span><span class="form-hint">letters, numbers, . _ -</span>
+      </label>
+      <input type="text" id="username" name="username" class="form-input font-mono"
+             autocomplete="username" required
+             value="<%= typeof values !== 'undefined' && values.username ? values.username : '' %>">
+    </div>
+
+    <div class="form-group">
+      <label for="password" class="form-label">
+        <span>Choose a password</span><span class="form-hint"><%= minLength %>+ characters</span>
+      </label>
+      <input type="password" id="password" name="password" class="form-input"
+             autocomplete="new-password" minlength="<%= minLength %>" required>
+    </div>
+
+    <div class="form-group">
+      <label for="confirmPassword" class="form-label"><span>Confirm password</span></label>
+      <input type="password" id="confirmPassword" name="confirmPassword" class="form-input"
+             autocomplete="new-password" minlength="<%= minLength %>" required>
+    </div>
+
+    <button type="submit" class="btn btn-terracotta btn-lg btn-block">Create my account</button>
+  </form>
+
+  <p class="text-faint" style="font-size:13px;margin-top:var(--sp-5)">
+    Already have an account? <a href="/admin/login">Sign in</a>.
+  </p>
+
+</div>

@@ -13,7 +13,8 @@
     "test:watch": "jest --watch",
     "db:up": "docker run -d --name ati-postgres -e POSTGRES_PASSWORD=ati_dev_local -e POSTGRES_DB=ati_zmatf -p 5433:5432 postgres:17-alpine",
     "db:down": "docker rm -f ati-postgres",
-    "build:slips": "node database/tools/build-slips.js"
+    "build:slips": "node database/tools/build-slips.js",
+    "reset:handover": "node database/reset-handover.js"
   },
   "engines": {
     "node": ">=20"

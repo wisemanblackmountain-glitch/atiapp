@@ -1,0 +1,69 @@
+<%#
+  YOUR ACCOUNT — self-service password change
+
+  Route:  GET /admin/account, POST /admin/account/password
+  Available to every administrator whatever their role.
+
+  Locals: account, minLength, success?, error?
+%>
+
+<div class="container container-narrow section">
+
+  <span class="label-meta">Administration</span>
+  <h1 style="font-size:clamp(24px,3vw,32px)">Your account</h1>
+
+  <div class="card" style="margin-bottom:var(--sp-5)">
+    <table class="data-table" style="min-width:0">
+      <tbody>
+        <tr>
+          <td style="width:40%;color:var(--text-muted)">Name</td>
+          <td><strong><%= account.full_name %></strong></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text-muted)">Username</td>
+          <td class="font-mono"><%= account.username %></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text-muted)">Role</td>
+          <td><span class="badge badge-accent"><%= account.role %></span></td>
+        </tr>
+        <tr style="border-bottom:0">
+          <td style="color:var(--text-muted)">Password last changed</td>
+          <td class="font-mono" style="font-size:13px"><%= account.password_changed_at || 'never' %></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 style="font-size:20px">Change your password</h2>
+  <p class="text-muted" style="font-size:14px;max-width:64ch">
+    At least <%= minLength %> characters. Your current password is required even
+    though you are signed in — an unattended session should not be enough to
+    take over the account.
+  </p>
+
+  <form method="POST" action="/admin/account/password" class="card" style="max-width:520px">
+    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+
+    <div class="form-group">
+      <label for="currentPassword" class="form-label"><span>Current password</span></label>
+      <input type="password" id="currentPassword" name="currentPassword"
+             class="form-input" autocomplete="current-password" required>
+    </div>
+    <div class="form-group">
+      <label for="newPassword" class="form-label">
+        <span>New password</span><span class="form-hint"><%= minLength %>+ characters</span>
+      </label>
+      <input type="password" id="newPassword" name="newPassword"
+             class="form-input" autocomplete="new-password" minlength="<%= minLength %>" required>
+    </div>
+    <div class="form-group">
+      <label for="confirmPassword" class="form-label"><span>Confirm new password</span></label>
+      <input type="password" id="confirmPassword" name="confirmPassword"
+             class="form-input" autocomplete="new-password" minlength="<%= minLength %>" required>
+    </div>
+
+    <button type="submit" class="btn btn-terracotta">Change password</button>
+  </form>
+
+</div>

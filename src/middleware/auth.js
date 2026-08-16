@@ -41,16 +41,24 @@ const addUserToLocals = asyncHandler(async (req, res, next) => {
 
         if (req.session && req.session.adminUsername) {
             const admin = await admins.getByUsername(req.session.adminUsername);
-            if (admin) {
-                res.locals.admin = { id: admin.id, username: admin.username };
+            // Read through to the store rather than trusting the session copy,
+            // so deactivating an account or changing its role takes effect on
+            // the next request instead of whenever they next sign in.
+            if (admin && admin.is_active) {
+                res.locals.admin = {
+                    id: admin.id,
+                    username: admin.username,
+                    full_name: admin.full_name,
+                    role: admin.role,
+                };
                 req.admin = res.locals.admin;
             } else {
                 delete req.session.adminUsername;
             }
         }
     } catch (err) {
-        // Before seeding — or during a brief Firestore blip — nobody is signed
-        // in. That must not take down every page in the application.
+        // Before the schema exists — or during a brief database blip — nobody
+        // is signed in. That must not take down every page in the application.
         res.locals.user = null;
         res.locals.admin = null;
     }
@@ -66,6 +74,33 @@ function requireParticipant(req, res, next) {
 function requireAdmin(req, res, next) {
     if (req.admin) return next();
     return res.redirect('/admin/login');
+}
+
+/**
+ * Require one of the given roles.
+ *
+ * Guards are declared per route rather than inferred from a hierarchy, so
+ * reading a route tells you exactly who reaches it. That matters most for the
+ * answer key: `results/:n` renders correct answers, and a VIEWER must never
+ * arrive there by being "one level below" someone who may.
+ *
+ * A signed-in administrator without the role gets 403 and an explanation, not a
+ * redirect to sign-in — they are already authenticated, and bouncing them to a
+ * login form they have already passed is a confusing way to say "not you".
+ */
+function requireRole(...roles) {
+    const allowed = new Set(roles);
+    return function roleGuard(req, res, next) {
+        if (!req.admin) return res.redirect('/admin/login');
+        if (allowed.has(req.admin.role)) return next();
+
+        return res.status(403).render('error', {
+            title: 'Not permitted',
+            message: 'Your account does not have permission for that. '
+                + 'Ask an owner if you need it.',
+            nav: 'admin',
+        });
+    };
 }
 
 /**
@@ -102,5 +137,6 @@ module.exports = {
     addUserToLocals,
     requireParticipant,
     requireAdmin,
+    requireRole,
     loadAttempt,
 };

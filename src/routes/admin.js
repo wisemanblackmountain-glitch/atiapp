@@ -23,12 +23,21 @@ const auditRepo = require('../data/audit');
 const proctoring = require('../data/proctoring');
 const scoring = require('../engines/scoring');
 const asyncHandler = require('../utils/asyncHandler');
-const { requireAdmin } = require('../middleware/auth');
-const { verifyCsrf } = require('../middleware/validation');
+const adminsRepo = require('../data/admins');
+const { requireAdmin, requireRole } = require('../middleware/auth');
+const { verifyCsrf, cleanText } = require('../middleware/validation');
 
 const router = express.Router();
 
 router.use(requireAdmin);
+
+const { OWNER, FACILITATOR, VIEWER } = adminsRepo.ROLES;
+
+// Who may do what. Declared here so the policy is readable in one place rather
+// than scattered across twenty route definitions.
+const canRunSessions = requireRole(OWNER, FACILITATOR);   // PINs, retakes, reports
+const canManageTeam = requireRole(OWNER);                 // administrators
+// VIEWER reaches dashboard, roster and analytics — and nothing that acts.
 
 const STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'TIMED_OUT'];
 
@@ -142,7 +151,7 @@ router.get('/participants', asyncHandler(async (req, res) => {
  * signed in, a session was lost. Cascades to mappings and responses, so the
  * retake gets a fresh option randomisation rather than the layout already seen.
  */
-router.post('/participants/:participantNumber/retake', verifyCsrf, asyncHandler(async (req, res) => {
+router.post('/participants/:participantNumber/retake', canRunSessions, verifyCsrf, asyncHandler(async (req, res) => {
     const number = participantNumberParam(req);
     if (number === null) return res.redirect('/admin/participants');
 
@@ -196,7 +205,7 @@ router.post('/participants/:participantNumber/retake', verifyCsrf, asyncHandler(
  * a flashed PIN would be written to disk in plaintext, which is the one thing
  * this system avoids everywhere else.
  */
-router.post('/participants/:participantNumber/reissue-pin', verifyCsrf, asyncHandler(async (req, res) => {
+router.post('/participants/:participantNumber/reissue-pin', canRunSessions, verifyCsrf, asyncHandler(async (req, res) => {
     const number = participantNumberParam(req);
     if (number === null) return res.redirect('/admin/participants');
 
@@ -275,7 +284,7 @@ router.post('/participants/:participantNumber/reissue-pin', verifyCsrf, asyncHan
  *                assessment is already under way, since it cannot disturb
  *                anyone mid-attempt
  */
-router.post('/participants/reissue-pins', verifyCsrf, asyncHandler(async (req, res) => {
+router.post('/participants/reissue-pins', canRunSessions, verifyCsrf, asyncHandler(async (req, res) => {
     const scope = req.body.scope === 'all' ? 'all' : 'not_started';
 
     const roster = await attemptsRepo.rosterWithAttempts();
@@ -322,9 +331,203 @@ router.post('/participants/reissue-pins', verifyCsrf, asyncHandler(async (req, r
     });
 }));
 
+// ── Administrator team ───────────────────────────────────────────────────
+
+router.get('/team', canManageTeam, asyncHandler(async (req, res) => {
+    const [team, invitations] = await Promise.all([
+        adminsRepo.listAll(),
+        adminsRepo.listInvitations(),
+    ]);
+    return res.render('admin/team', {
+        title: 'Administrators',
+        nav: 'admin',
+        navTitle: 'Administration',
+        team,
+        invitations,
+        roles: adminsRepo.ROLE_LIST,
+        me: req.admin.username,
+        inviteTtlHours: adminsRepo.INVITE_TTL_HOURS,
+        success: req.query.done === 'role' ? 'Role updated.'
+            : req.query.done === 'deactivated' ? 'Account deactivated.'
+                : req.query.done === 'reactivated' ? 'Account reactivated.'
+                    : req.query.done === 'revoked' ? 'Invitation revoked.'
+                        : null,
+    });
+}));
+
+/**
+ * Invite an administrator.
+ *
+ * The code is shown once and never stored in plaintext, so it is rendered
+ * directly rather than redirected to — a redirect would carry it through the
+ * session, and the session store is the database.
+ */
+router.post('/team/invite', canManageTeam, verifyCsrf, asyncHandler(async (req, res) => {
+    const fullName = cleanText(req.body.fullName, 80);
+    const role = adminsRepo.ROLE_LIST.includes(req.body.role) ? req.body.role : null;
+
+    if (!fullName || fullName.length < 2 || !role) {
+        const [team, invitations] = await Promise.all([
+            adminsRepo.listAll(), adminsRepo.listInvitations(),
+        ]);
+        return res.status(400).render('admin/team', {
+            title: 'Administrators', nav: 'admin', navTitle: 'Administration',
+            team, invitations, roles: adminsRepo.ROLE_LIST, me: req.admin.username,
+            inviteTtlHours: adminsRepo.INVITE_TTL_HOURS,
+            error: 'Enter the person\'s name and choose a role.',
+        });
+    }
+
+    const invitation = await db.transaction(async (client) => {
+        const created = await adminsRepo.createInvitation(
+            { fullName, role, invitedBy: req.admin.username }, client
+        );
+        await auditRepo.record({
+            adminUsername: req.admin.username,
+            action: 'ADMIN_INVITED',
+            // The code is never recorded — it is a credential.
+            detail: { invited_name: fullName, role },
+            ipAddress: req.ip,
+        }, client);
+        return created;
+    });
+
+    return res.render('admin/invite-created', {
+        title: 'Invitation created',
+        nav: 'admin',
+        navTitle: 'Administration',
+        invitation,
+    });
+}));
+
+router.post('/team/invitations/:id/revoke', canManageTeam, verifyCsrf, asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.redirect('/admin/team');
+
+    await db.transaction(async (client) => {
+        const revoked = await adminsRepo.revokeInvitation(id, client);
+        if (revoked) {
+            await auditRepo.record({
+                adminUsername: req.admin.username,
+                action: 'ADMIN_INVITE_REVOKED',
+                detail: { invitation_id: id },
+                ipAddress: req.ip,
+            }, client);
+        }
+    });
+    return res.redirect('/admin/team?done=revoked');
+}));
+
+router.post('/team/:username/role', canManageTeam, verifyCsrf, asyncHandler(async (req, res) => {
+    const username = String(req.params.username);
+    const role = req.body.role;
+
+    const result = await adminsRepo.setRole(username, role);
+    if (!result.ok) {
+        return res.status(409).render('error', {
+            title: result.reason === 'last-owner' ? 'Cannot remove the last owner' : 'Not found',
+            message: result.reason === 'last-owner'
+                ? 'This is the only active owner. Promote someone else to owner first, '
+                  + 'otherwise nobody would be able to manage administrators.'
+                : 'No administrator with that username.',
+            nav: 'admin',
+        });
+    }
+
+    await auditRepo.record({
+        adminUsername: req.admin.username,
+        action: 'ADMIN_ROLE_CHANGED',
+        detail: { target: username, from: result.previous, to: role },
+        ipAddress: req.ip,
+    });
+    return res.redirect('/admin/team?done=role');
+}));
+
+router.post('/team/:username/active', canManageTeam, verifyCsrf, asyncHandler(async (req, res) => {
+    const username = String(req.params.username);
+    const activate = req.body.active === '1';
+
+    // Deactivating yourself would sign you out mid-action and, if you were the
+    // only owner, lock the organisation out of its own system.
+    if (!activate && username.toLowerCase() === req.admin.username.toLowerCase()) {
+        return res.status(409).render('error', {
+            title: 'Cannot deactivate yourself',
+            message: 'Ask another owner to do it, so you are not left signed out mid-change.',
+            nav: 'admin',
+        });
+    }
+
+    const result = await adminsRepo.setActive(username, activate);
+    if (!result.ok) {
+        return res.status(409).render('error', {
+            title: result.reason === 'last-owner' ? 'Cannot deactivate the last owner' : 'Not found',
+            message: result.reason === 'last-owner'
+                ? 'This is the only active owner. Promote someone else to owner first.'
+                : 'No administrator with that username.',
+            nav: 'admin',
+        });
+    }
+
+    await auditRepo.record({
+        adminUsername: req.admin.username,
+        action: activate ? 'ADMIN_REACTIVATED' : 'ADMIN_DEACTIVATED',
+        detail: { target: username },
+        ipAddress: req.ip,
+    });
+    return res.redirect(`/admin/team?done=${activate ? 'reactivated' : 'deactivated'}`);
+}));
+
+// ── Own account ──────────────────────────────────────────────────────────
+// Available to every administrator, whatever their role.
+
+router.get('/account', asyncHandler(async (req, res) => {
+    const me = await adminsRepo.getByUsername(req.admin.username);
+    return res.render('admin/account', {
+        title: 'Your account',
+        nav: 'admin',
+        navTitle: 'Administration',
+        account: me,
+        minLength: adminsRepo.MIN_PASSWORD_LENGTH,
+        success: req.query.done === 'password' ? 'Your password has been changed.' : null,
+    });
+}));
+
+router.post('/account/password', verifyCsrf, asyncHandler(async (req, res) => {
+    const me = await adminsRepo.getByUsername(req.admin.username);
+    const current = String(req.body.currentPassword || '');
+    const next = String(req.body.newPassword || '');
+    const confirm = String(req.body.confirmPassword || '');
+
+    const render = (error) => res.status(400).render('admin/account', {
+        title: 'Your account', nav: 'admin', navTitle: 'Administration',
+        account: me, minLength: adminsRepo.MIN_PASSWORD_LENGTH, error,
+    });
+
+    // The current password is required even though they are signed in: an
+    // unattended session should not be enough to take over the account.
+    if (!await adminsRepo.verifyCredentials(req.admin.username, current)) {
+        return render('Your current password is not correct.');
+    }
+    if (next !== confirm) return render('The two new passwords do not match.');
+    if (next === current) return render('The new password must be different from the current one.');
+
+    const result = await adminsRepo.changePassword(req.admin.username, next);
+    if (!result.ok) {
+        return render(`Choose a password of at least ${adminsRepo.MIN_PASSWORD_LENGTH} characters.`);
+    }
+
+    await auditRepo.record({
+        adminUsername: req.admin.username,
+        action: 'ADMIN_PASSWORD_CHANGED',
+        detail: { self: true },
+        ipAddress: req.ip,
+    });
+    return res.redirect('/admin/account?done=password');
+}));
+
 // ── Audit log ────────────────────────────────────────────────────────────
 
-router.get('/audit', asyncHandler(async (req, res) => {
+router.get('/audit', canRunSessions, asyncHandler(async (req, res) => {
     return res.render('admin/audit', {
         title: 'Audit log',
         nav: 'admin',
@@ -335,8 +538,14 @@ router.get('/audit', asyncHandler(async (req, res) => {
 
 // ── Individual report ────────────────────────────────────────────────────
 
-/** ⚠ Renders correct_option_text and is_correct. Administrator realm only. */
-router.get('/results/:participantNumber', asyncHandler(async (req, res) => {
+/**
+ * ⚠ Renders correct_option_text and is_correct.
+ *
+ * Guarded to OWNER and FACILITATOR. A VIEWER is deliberately kept out: they
+ * need scores and analytics, not the instrument. This is the single sharpest
+ * permission in the application.
+ */
+router.get('/results/:participantNumber', canRunSessions, asyncHandler(async (req, res) => {
     const number = Number(req.params.participantNumber);
     if (!Number.isInteger(number)) return res.redirect('/admin/participants');
 

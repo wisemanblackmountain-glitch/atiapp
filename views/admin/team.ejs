@@ -1,0 +1,151 @@
+<%#
+  ADMINISTRATORS
+
+  Route:  GET /admin/team            (OWNER only)
+  Layout: nav: 'admin'
+
+  Locals
+    team, invitations, roles, me, inviteTtlHours, success?, error?
+
+  Accounts are deactivated rather than deleted, so audit rows written months
+  ago still name a real person.
+%>
+
+<div class="container section">
+
+  <div class="row" style="margin-bottom:var(--sp-4)">
+    <div>
+      <span class="label-meta">Administration</span>
+      <h1 style="font-size:clamp(26px,3.4vw,34px);margin:0">Administrators</h1>
+    </div>
+    <span class="row-end"></span>
+    <a href="/admin/account" class="btn btn-ghost btn-sm">Your account</a>
+  </div>
+
+  <div class="table-wrap" style="margin-bottom:var(--sp-6)">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Username</th>
+          <th scope="col">Role</th>
+          <th scope="col">Last signed in</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% team.forEach(function (a) { %>
+          <tr<%= a.is_active ? '' : ' style="opacity:.55"' %>>
+            <td>
+              <div style="font-weight:650"><%= a.full_name %></div>
+              <% if (!a.is_active) { %><span class="badge">DEACTIVATED</span><% } %>
+              <% if (a.username === me) { %><span class="badge badge-accent">YOU</span><% } %>
+            </td>
+            <td class="font-mono"><%= a.username %></td>
+            <td>
+              <form method="POST" action="/admin/team/<%= a.username %>/role" class="row" style="gap:var(--sp-2)">
+                <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                <select name="role" class="form-input" style="width:auto;padding:4px 8px;font-size:13px">
+                  <% roles.forEach(function (r) { %>
+                    <option value="<%= r %>" <%= a.role === r ? 'selected' : '' %>><%= r %></option>
+                  <% }); %>
+                </select>
+                <button type="submit" class="btn btn-sm btn-ghost">Set</button>
+              </form>
+            </td>
+            <td class="font-mono" style="font-size:12px">
+              <%= a.last_signed_in_at || 'never' %>
+            </td>
+            <td>
+              <% if (a.username !== me) { %>
+                <form method="POST" action="/admin/team/<%= a.username %>/active"
+                      onsubmit="return confirm('<%= a.is_active ? "Deactivate" : "Reactivate" %> <%= a.full_name.replace(/'/g, "\\'") %>?');">
+                  <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                  <input type="hidden" name="active" value="<%= a.is_active ? '0' : '1' %>">
+                  <button type="submit" class="btn btn-sm btn-ghost">
+                    <%= a.is_active ? 'Deactivate' : 'Reactivate' %>
+                  </button>
+                </form>
+              <% } else { %>
+                <span class="text-faint">—</span>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 style="font-size:20px">Invite an administrator</h2>
+  <p class="text-muted" style="max-width:66ch;font-size:14px">
+    You will be shown a one-time code. Hand it to them directly — they choose
+    their own username and password, so nobody ever knows anyone else's.
+    Codes expire after <%= inviteTtlHours %> hours.
+  </p>
+
+  <form method="POST" action="/admin/team/invite" class="card" style="margin-bottom:var(--sp-6)">
+    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <div class="row" style="gap:var(--sp-3);align-items:flex-end">
+      <div class="form-group" style="flex:2;min-width:220px;margin:0">
+        <label for="fullName" class="form-label"><span>Full name</span></label>
+        <input type="text" id="fullName" name="fullName" class="form-input" required
+               placeholder="Their name, as it should appear in the audit log">
+      </div>
+      <div class="form-group" style="flex:1;min-width:170px;margin:0">
+        <label for="role" class="form-label"><span>Role</span></label>
+        <select id="role" name="role" class="form-input">
+          <option value="FACILITATOR">FACILITATOR — runs sessions</option>
+          <option value="VIEWER">VIEWER — read-only</option>
+          <option value="OWNER">OWNER — manages administrators</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-terracotta">Create invitation</button>
+    </div>
+  </form>
+
+  <h2 style="font-size:20px">Invitations</h2>
+  <% if (!invitations || invitations.length === 0) { %>
+    <p class="text-muted">None yet.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">For</th><th scope="col">Role</th>
+            <th scope="col">Invited by</th><th scope="col">Status</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% invitations.forEach(function (i) { %>
+            <tr>
+              <td><%= i.full_name %></td>
+              <td class="font-mono" style="font-size:12px"><%= i.role %></td>
+              <td class="font-mono" style="font-size:12px"><%= i.invited_by %></td>
+              <td>
+                <% if (i.status === 'ACCEPTED') { %>
+                  <span class="badge badge-success">ACCEPTED</span>
+                  <span class="text-faint font-mono" style="font-size:11px"><%= i.accepted_username %></span>
+                <% } else if (i.status === 'OPEN') { %>
+                  <span class="badge badge-accent">OPEN</span>
+                <% } else { %>
+                  <span class="badge"><%= i.status %></span>
+                <% } %>
+              </td>
+              <td>
+                <% if (i.status === 'OPEN') { %>
+                  <form method="POST" action="/admin/team/invitations/<%= i.id %>/revoke"
+                        onsubmit="return confirm('Revoke this invitation? The code stops working immediately.');">
+                    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                    <button type="submit" class="btn btn-sm btn-ghost">Revoke</button>
+                  </form>
+                <% } else { %><span class="text-faint">—</span><% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+
+</div>

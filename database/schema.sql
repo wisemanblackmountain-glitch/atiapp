@@ -48,11 +48,73 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS last_signed_in_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_participants_last_name
     ON participants (lower(last_name));
 
+-- ── Administrators ───────────────────────────────────────────────────────
+-- Three roles, narrowing:
+--   OWNER        everything, including managing other administrators
+--   FACILITATOR  runs sessions — PINs, retakes, reports, audit
+--   VIEWER       dashboard and analytics only; no answer key, no actions
+--
+-- The answer key is the line that matters. views/admin/result-detail.ejs shows
+-- correct answers, so VIEWER is kept out of it: an M&E officer needs scores,
+-- not the instrument.
+--
+-- Accounts are deactivated, never deleted, so audit rows stay attributable to a
+-- real person after they leave.
 CREATE TABLE IF NOT EXISTS admin_users (
-    username       TEXT        PRIMARY KEY CHECK (length(btrim(username)) > 0),
-    password_hash  TEXT        NOT NULL,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    username            TEXT        PRIMARY KEY CHECK (length(btrim(username)) > 0),
+    password_hash       TEXT        NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    full_name           TEXT        NOT NULL DEFAULT '',
+    email               TEXT,
+    role                TEXT        NOT NULL DEFAULT 'OWNER'
+                        CHECK (role IN ('OWNER', 'FACILITATOR', 'VIEWER')),
+    is_active           BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_by          TEXT,
+    password_changed_at TIMESTAMPTZ,
+    last_signed_in_at   TIMESTAMPTZ
 );
+
+-- Added after the initial release; idempotent so existing databases pick them
+-- up on the next boot. The DEFAULT 'OWNER' is deliberate: the account seeded
+-- before roles existed must remain able to manage the system.
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS full_name           TEXT NOT NULL DEFAULT '';
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS email               TEXT;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role                TEXT NOT NULL DEFAULT 'OWNER';
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS is_active           BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS created_by          TEXT;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_signed_in_at   TIMESTAMPTZ;
+
+DO $$ BEGIN
+    ALTER TABLE admin_users ADD CONSTRAINT admin_role_valid
+        CHECK (role IN ('OWNER', 'FACILITATOR', 'VIEWER'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ── Administrator invitations ────────────────────────────────────────────
+-- There is no email service on the free tier, so an invitation is a one-time
+-- code shown once on screen and handed over — the same pattern as participant
+-- PINs, for the same reason.
+--
+-- Only the hash is stored. An invite code is a credential: anyone holding one
+-- can create an account at the role it carries, so a leaked database must not
+-- yield usable codes.
+CREATE TABLE IF NOT EXISTS admin_invitations (
+    id                BIGSERIAL   PRIMARY KEY,
+    token_hash        TEXT        NOT NULL UNIQUE,
+    full_name         TEXT        NOT NULL CHECK (length(btrim(full_name)) > 0),
+    role              TEXT        NOT NULL
+                      CHECK (role IN ('OWNER', 'FACILITATOR', 'VIEWER')),
+    invited_by        TEXT        NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at        TIMESTAMPTZ NOT NULL,
+    accepted_at       TIMESTAMPTZ,
+    accepted_username TEXT,
+    revoked_at        TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_invitations_open
+    ON admin_invitations (expires_at) WHERE accepted_at IS NULL AND revoked_at IS NULL;
 
 -- ── Assessment content ───────────────────────────────────────────────────
 -- Official ATI content, loaded by database/seed.js from gitignored source
@@ -218,8 +280,7 @@ CREATE TABLE IF NOT EXISTS admin_audit (
     id                 BIGSERIAL   PRIMARY KEY,
     occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     admin_username     TEXT        NOT NULL,
-    action             TEXT        NOT NULL
-                       CHECK (action IN ('RETAKE_ALLOWED', 'PIN_REISSUED')),
+    action             TEXT        NOT NULL,
     participant_number SMALLINT,
     -- What was discarded, so "who let officer 12 retake, and what score did
     -- they lose?" is answerable months later.
@@ -229,6 +290,23 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 
 CREATE INDEX IF NOT EXISTS idx_audit_occurred ON admin_audit (occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_participant ON admin_audit (participant_number);
+
+-- The action vocabulary lives in a constraint rather than the column type, so
+-- adding one is an ALTER rather than a type migration. Account-lifecycle events
+-- sit alongside the assessment ones: who was invited, who joined, whose role
+-- changed. In an organisation with several facilitators, "who gave that person
+-- access?" is exactly the question an audit exists to answer.
+DO $$ BEGIN
+    ALTER TABLE admin_audit DROP CONSTRAINT IF EXISTS admin_audit_action_check;
+    ALTER TABLE admin_audit ADD CONSTRAINT admin_audit_action_check
+        CHECK (action IN (
+            'RETAKE_ALLOWED', 'PIN_REISSUED',
+            'ADMIN_INVITED', 'ADMIN_INVITE_REVOKED', 'ADMIN_JOINED',
+            'ADMIN_ROLE_CHANGED', 'ADMIN_DEACTIVATED', 'ADMIN_REACTIVATED',
+            'ADMIN_PASSWORD_CHANGED'
+        ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ── Metadata ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS meta (

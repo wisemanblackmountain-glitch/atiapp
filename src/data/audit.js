@@ -21,9 +21,30 @@
 
 const db = require('./pool');
 
+/**
+ * The recordable actions.
+ *
+ * Mirrors the CHECK constraint on admin_audit. Kept as an explicit whitelist so
+ * a typo fails loudly at the call site rather than being written and only
+ * surfacing as a constraint violation — or, worse, as a category nobody
+ * queries for.
+ *
+ * Two groups: what was done to an assessment, and who was given access to do
+ * it. In an organisation with several facilitators, "who let that person in?"
+ * is exactly the question an audit exists to answer.
+ */
 const ACTIONS = {
+    // Assessment
     RETAKE_ALLOWED: 'RETAKE_ALLOWED',
     PIN_REISSUED: 'PIN_REISSUED',
+    // Administrator accounts
+    ADMIN_INVITED: 'ADMIN_INVITED',
+    ADMIN_INVITE_REVOKED: 'ADMIN_INVITE_REVOKED',
+    ADMIN_JOINED: 'ADMIN_JOINED',
+    ADMIN_ROLE_CHANGED: 'ADMIN_ROLE_CHANGED',
+    ADMIN_DEACTIVATED: 'ADMIN_DEACTIVATED',
+    ADMIN_REACTIVATED: 'ADMIN_REACTIVATED',
+    ADMIN_PASSWORD_CHANGED: 'ADMIN_PASSWORD_CHANGED',
 };
 
 function iso(value) {

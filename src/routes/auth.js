@@ -15,6 +15,7 @@ const express = require('express');
 
 const participants = require('../data/participants');
 const admins = require('../data/admins');
+const audit = require('../data/audit');
 const rateLimit = require('../middleware/rateLimit');
 const asyncHandler = require('../utils/asyncHandler');
 const {
@@ -179,8 +180,78 @@ router.post(
         }
 
         rateLimit.clear(req, 'admin', adminIdentifier(req));
+        await admins.recordSignIn(admin.username);
         await regenerate(req);
         req.session.adminUsername = admin.username;
+
+        return res.redirect('/admin/dashboard');
+    })
+);
+
+// ── Redeem an invitation ─────────────────────────────────────────────────
+// The one administrator route reachable without signing in — necessarily, since
+// the person using it has no account yet. Gated entirely by possession of a
+// valid, unexpired, unredeemed code.
+
+router.get('/admin/join', (req, res) => {
+    if (req.admin) return res.redirect('/admin/dashboard');
+    res.render('auth/admin-join', {
+        title: 'Set up your account',
+        nav: 'none',
+        minLength: admins.MIN_PASSWORD_LENGTH,
+        values: { code: cleanText(req.query.code || '', 40) },
+    });
+});
+
+router.post(
+    '/admin/join',
+    verifyCsrf,
+    rateLimit.guard('admin-join', 'auth/admin-join', (req) => cleanText(req.body.code, 40).toUpperCase(), {
+        minLength: admins.MIN_PASSWORD_LENGTH,
+    }),
+    asyncHandler(async (req, res) => {
+        const code = cleanText(req.body.code, 40);
+        const username = cleanText(req.body.username, 40);
+        const password = String(req.body.password || '');
+        const confirm = String(req.body.confirmPassword || '');
+
+        const render = (error) => res.status(400).render('auth/admin-join', {
+            title: 'Set up your account',
+            nav: 'none',
+            minLength: admins.MIN_PASSWORD_LENGTH,
+            values: { code, username },
+            error,
+        });
+
+        if (password !== confirm) return render('The two passwords do not match.');
+
+        const result = await admins.acceptInvitation({ code, username, password });
+
+        if (!result.ok) {
+            // An invalid code is rate limited: without it, the code space could
+            // be walked from outside with no account required.
+            if (result.reason === 'invalid-code') {
+                rateLimit.recordFailure(req, 'admin-join', code.toUpperCase());
+                return render('That invitation code is not valid, has expired, or has already been used.');
+            }
+            if (result.reason === 'username-taken') return render('That username is already taken.');
+            if (result.reason === 'invalid-username') {
+                return render('Usernames are 3–40 characters: letters, numbers, dot, underscore or hyphen.');
+            }
+            return render(`Choose a password of at least ${admins.MIN_PASSWORD_LENGTH} characters.`);
+        }
+
+        await audit.record({
+            adminUsername: result.username,
+            action: 'ADMIN_JOINED',
+            detail: { full_name: result.fullName, role: result.role },
+            ipAddress: req.ip,
+        });
+
+        rateLimit.clear(req, 'admin-join', code.toUpperCase());
+        await regenerate(req);
+        req.session.adminUsername = result.username;
+        await admins.recordSignIn(result.username);
 
         return res.redirect('/admin/dashboard');
     })

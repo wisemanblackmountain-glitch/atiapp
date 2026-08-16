@@ -1,0 +1,55 @@
+<%#
+  INVITATION CREATED — code shown once
+
+  Route:  POST /admin/team/invite
+  Locals: invitation { code, expiresAt, role, fullName }
+
+  Only the hash is stored, so this render is the sole opportunity to read the
+  code. Rendered directly rather than redirected to, because a redirect would
+  carry a credential through the session — and the session store is the
+  database.
+%>
+
+<div class="container container-narrow section">
+
+  <div class="label-meta">Invitation created</div>
+  <h1 style="font-size:clamp(24px,3vw,32px)">Code for <%= invitation.fullName %></h1>
+
+  <div class="alert alert-danger" role="alert" style="margin-bottom:var(--sp-5)">
+    <strong>This code is shown once.</strong> It cannot be recovered — if it is
+    lost, revoke the invitation and create another.
+  </div>
+
+  <div class="card card-lg" style="text-align:center">
+    <span class="label-meta">One-time invitation code</span>
+    <div class="font-mono"
+         style="font-size:30px;font-weight:600;letter-spacing:.1em;color:var(--accent);margin:var(--sp-4) 0">
+      <%= invitation.code %>
+    </div>
+    <p class="text-muted" style="font-size:14px;margin:0">
+      Role: <strong><%= invitation.role %></strong> &middot;
+      expires <span class="font-mono"><%= invitation.expiresAt %></span>
+    </p>
+  </div>
+
+  <div class="card" style="margin-top:var(--sp-4)">
+    <h3>What they do with it</h3>
+    <ol class="text-muted" style="font-size:15px;padding-left:var(--sp-5);margin:0">
+      <li style="margin-bottom:var(--sp-2)">Go to <span class="font-mono">/admin/join</span></li>
+      <li style="margin-bottom:var(--sp-2)">Enter this code</li>
+      <li>Choose their own username and password</li>
+    </ol>
+  </div>
+
+  <div class="alert" style="margin-top:var(--sp-4)">
+    Hand it over directly. Anyone holding this code can create an
+    administrator account at the <strong><%= invitation.role %></strong> role,
+    so treat it as you would a password.
+  </div>
+
+  <div class="row" style="gap:var(--sp-3);margin-top:var(--sp-5)">
+    <button type="button" class="btn btn-terracotta" onclick="window.print()">Print</button>
+    <a href="/admin/team" class="btn btn-ghost">Back to administrators</a>
+  </div>
+
+</div>
